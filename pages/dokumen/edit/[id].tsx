@@ -1,0 +1,132 @@
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/router'
+import Head from 'next/head'
+import Link from 'next/link'
+import Layout from '@/components/Layout'
+import { supabase } from '@/lib/supabase'
+
+export default function EditDokumenPage() {
+  const router = useRouter()
+  const { id } = router.query
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({
+    nomor_laporan:'', nama_dokumen:'', kategori:'Perencanaan', pic:'',
+    tanggal_diajukan:'', target_selesai:'', tanggal_selesai:'',
+    status:'Belum Direviu', progres:0, catatan:''
+  })
+
+  useEffect(()=>{
+    if(!id) return
+    supabase.from('dokumen').select('*').eq('id',id).single().then(({data})=>{
+      if(data) setForm({
+        nomor_laporan: data.nomor_laporan||'',
+        nama_dokumen: data.nama_dokumen||'',
+        kategori: data.kategori||'Perencanaan',
+        pic: data.pic||'',
+        tanggal_diajukan: data.tanggal_diajukan||'',
+        target_selesai: data.target_selesai||'',
+        tanggal_selesai: data.tanggal_selesai||'',
+        status: data.status||'Belum Direviu',
+        progres: data.progres||0,
+        catatan: data.catatan||'',
+      })
+      setLoading(false)
+    })
+  },[id])
+
+  function set(k:string,v:string|number){setForm(f=>({...f,[k]:v}))}
+
+  async function handleSave(e:React.FormEvent){
+    e.preventDefault()
+    if(!form.nama_dokumen||!form.nomor_laporan){setError('Nama dan nomor laporan wajib diisi');return}
+    setSaving(true); setError('')
+    const today=new Date().toISOString()
+    const {error:err}=await supabase.from('dokumen').update({
+      ...form,
+      target_selesai: form.target_selesai||null,
+      tanggal_selesai: form.tanggal_selesai||null,
+      updated_at: today
+    }).eq('id',id)
+    if(err){setError('Gagal menyimpan: '+err.message);setSaving(false);return}
+    await supabase.from('riwayat').insert({
+      dokumen_id:id, keterangan:`Data dokumen diedit: ${form.status} (${form.progres}%)`, warna:'b'
+    })
+    router.push('/dokumen')
+  }
+
+  if(loading) return <Layout><div className="flex justify-center items-center h-64"><div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div></Layout>
+
+  return (
+    <>
+      <Head><title>Edit Dokumen — Monitoring Reviu</title></Head>
+      <Layout>
+        <div className="max-w-2xl space-y-5">
+          <div className="flex items-center gap-2">
+            <Link href="/dokumen" className="text-sm text-gray-500 hover:text-gray-700">← Kembali ke Daftar</Link>
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-gray-900">Edit Dokumen</h1>
+            <p className="text-sm text-gray-500">Perbarui data dokumen yang sudah diregistrasi</p>
+          </div>
+          <form onSubmit={handleSave} className="card p-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="label">Nama Dokumen <span className="text-red-500">*</span></label>
+                <input className="input" value={form.nama_dokumen} onChange={e=>set('nama_dokumen',e.target.value)} required/>
+              </div>
+              <div>
+                <label className="label">Nomor Laporan <span className="text-red-500">*</span></label>
+                <input className="input" value={form.nomor_laporan} onChange={e=>set('nomor_laporan',e.target.value)} required/>
+              </div>
+              <div>
+                <label className="label">Kategori</label>
+                <select className="input" value={form.kategori} onChange={e=>set('kategori',e.target.value)}>
+                  <option>Perencanaan</option><option>Keuangan</option><option>Kinerja</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Tanggal Diajukan</label>
+                <input type="date" className="input" value={form.tanggal_diajukan} onChange={e=>set('tanggal_diajukan',e.target.value)}/>
+              </div>
+              <div>
+                <label className="label">Target Selesai</label>
+                <input type="date" className="input" value={form.target_selesai} onChange={e=>set('target_selesai',e.target.value)}/>
+              </div>
+              <div>
+                <label className="label">Status</label>
+                <select className="input" value={form.status} onChange={e=>set('status',e.target.value)}>
+                  {['Belum Direviu','Dalam Proses','Perlu Revisi','Selesai'].map(s=><option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Progres (%)</label>
+                <input type="number" min={0} max={100} className="input" value={form.progres} onChange={e=>set('progres',+e.target.value)}/>
+              </div>
+              <div>
+                <label className="label">Tanggal Selesai Reviu</label>
+                <input type="date" className="input" value={form.tanggal_selesai} onChange={e=>set('tanggal_selesai',e.target.value)}/>
+              </div>
+              <div className="md:col-span-2">
+                <label className="label">PIC / Unit Pemilik</label>
+                <input className="input" value={form.pic} onChange={e=>set('pic',e.target.value)}/>
+              </div>
+              <div className="md:col-span-2">
+                <label className="label">Catatan</label>
+                <textarea className="input min-h-20 resize-y" value={form.catatan} onChange={e=>set('catatan',e.target.value)}/>
+              </div>
+            </div>
+            {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
+            <div className="flex gap-3 justify-end pt-2 border-t border-gray-100">
+              <Link href="/dokumen" className="btn-secondary">Batal</Link>
+              <button type="submit" disabled={saving} className="btn-primary">
+                {saving?'Menyimpan...':'Simpan Perubahan'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </Layout>
+    </>
+  )
+}
