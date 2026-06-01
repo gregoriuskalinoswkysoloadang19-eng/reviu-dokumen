@@ -5,14 +5,14 @@ import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
 
-const ALLOWED_DOK = ['.pdf','.doc','.docx','.xlsx','.xls','.zip','.rar']
-const ALLOWED_DOK_MIME = ['application/pdf','application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/zip','application/x-zip-compressed','application/x-rar-compressed',
-  'application/octet-stream']
-const MAX_SIZE = 20 * 1024 * 1024 // 20MB
+const STATUS_PROGRES: Record<string, number> = {
+  'Belum Direviu': 0,
+  'Dalam Proses': 50,
+  'Perlu Revisi': 25,
+  'Selesai': 100,
+}
+const STATUS_LIST = ['Belum Direviu', 'Dalam Proses', 'Perlu Revisi', 'Selesai']
+const MAX_SIZE = 20 * 1024 * 1024
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -23,14 +23,19 @@ export default function RegisterPage() {
   const [form, setForm] = useState({
     nomor_laporan:'', nama_dokumen:'', kategori:'Perencanaan', pic:'',
     tanggal_diajukan: new Date().toISOString().slice(0,10),
-    target_selesai:'', catatan:''
+    target_selesai:'', status:'Belum Direviu', catatan:''
   })
 
   function set(k:string,v:string){setForm(f=>({...f,[k]:v}))}
 
+  function handleStatusChange(newStatus: string) {
+    setForm(f=>({...f, status: newStatus}))
+  }
+
   function validateFile(f:File):string {
     const ext = '.'+f.name.split('.').pop()?.toLowerCase()
-    if(!ALLOWED_DOK.includes(ext)) return `Format tidak didukung. Gunakan: ${ALLOWED_DOK.join(', ')}`
+    const allowed = ['.pdf','.doc','.docx','.xlsx','.xls','.zip','.rar']
+    if(!allowed.includes(ext)) return `Format tidak didukung. Gunakan: ${allowed.join(', ')}`
     if(f.size>MAX_SIZE) return `Ukuran file maksimal 20 MB (file ini: ${(f.size/1024/1024).toFixed(1)} MB)`
     return ''
   }
@@ -38,9 +43,10 @@ export default function RegisterPage() {
   function handleFileChange(e:React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]||null
     setFile(f)
-    if(f) setFileError(validateFile(f))
-    else setFileError('')
+    setFileError(f ? validateFile(f) : '')
   }
+
+  const progresOtomatis = STATUS_PROGRES[form.status] ?? 0
 
   async function handleSubmit(e:React.FormEvent) {
     e.preventDefault()
@@ -50,7 +56,6 @@ export default function RegisterPage() {
 
     let file_url=null, file_name=null, file_size=null
     if(file) {
-      const ext = file.name.split('.').pop()
       const path = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`
       const {error:upErr}=await supabase.storage.from('dokumen-reviu').upload(path,file,{contentType:file.type||'application/octet-stream'})
       if(upErr){setError('Gagal upload file: '+upErr.message);setLoading(false);return}
@@ -59,10 +64,11 @@ export default function RegisterPage() {
     }
 
     const {data:inserted,error:insertErr}=await supabase.from('dokumen').insert({
-      ...form, target_selesai:form.target_selesai||null,
-      status:'Belum Direviu', progres:0,
+      ...form,
+      progres: progresOtomatis,
+      target_selesai: form.target_selesai||null,
+      laporan_url:null, laporan_name:null, laporan_size:null,
       file_url, file_name, file_size,
-      laporan_url:null, laporan_name:null, laporan_size:null
     }).select().single()
 
     if(insertErr){setError('Gagal menyimpan: '+insertErr.message);setLoading(false);return}
@@ -81,12 +87,10 @@ export default function RegisterPage() {
       <Head><title>Register Dokumen — Monitoring Reviu</title></Head>
       <Layout>
         <div className="max-w-2xl space-y-5">
-          <div className="flex items-center gap-2">
-            <Link href="/dokumen" className="text-sm text-gray-500 hover:text-gray-700">← Kembali</Link>
-          </div>
+          <Link href="/dokumen" className="text-sm text-gray-500 hover:text-gray-700">← Kembali</Link>
           <div>
             <h1 className="text-lg font-semibold text-gray-900">Register Dokumen Reviu</h1>
-            <p className="text-sm text-gray-500">Daftarkan dokumen untuk direviu oleh Inspektorat Kabupaten Sumba Barat</p>
+            <p className="text-sm text-gray-500">Daftarkan dokumen untuk direviu Inspektorat Kabupaten Sumba Barat</p>
           </div>
           <form onSubmit={handleSubmit} className="card p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -104,6 +108,29 @@ export default function RegisterPage() {
                   <option>Perencanaan</option><option>Keuangan</option><option>Kinerja</option>
                 </select>
               </div>
+
+              {/* Status + Progres Otomatis */}
+              <div>
+                <label className="label">Status Awal</label>
+                <select className="input" value={form.status} onChange={e=>handleStatusChange(e.target.value)}>
+                  {STATUS_LIST.map(s=><option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Progres <span className="text-xs text-gray-400 font-normal">(otomatis)</span></label>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width:`${progresOtomatis}%`,
+                        background: form.status==='Selesai'?'#16a34a':form.status==='Dalam Proses'?'#2563eb':form.status==='Perlu Revisi'?'#d97706':'#9ca3af'
+                      }}></div>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700 w-10">{progresOtomatis}%</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Otomatis: Belum=0% · Revisi=25% · Proses=50% · Selesai=100%</p>
+              </div>
+
               <div>
                 <label className="label">Tanggal Diajukan ke Inspektorat</label>
                 <input type="date" className="input" value={form.tanggal_diajukan} onChange={e=>set('tanggal_diajukan',e.target.value)}/>
@@ -117,7 +144,7 @@ export default function RegisterPage() {
                 <input className="input" value={form.pic} onChange={e=>set('pic',e.target.value)} placeholder="Nama bidang atau unit pengirim"/>
               </div>
 
-              {/* File Upload dengan validasi */}
+              {/* File Upload */}
               <div className="md:col-span-2">
                 <label className="label">
                   Upload File Dokumen
@@ -138,21 +165,15 @@ export default function RegisterPage() {
                   ) : (
                     <div>
                       <p className="text-sm text-gray-600">Klik untuk pilih file</p>
-                      <p className="text-xs text-gray-400 mt-0.5">Mendukung: PDF · DOCX · XLSX · <strong>ZIP · RAR</strong></p>
+                      <p className="text-xs text-gray-400 mt-0.5">Mendukung: PDF · DOCX · XLSX · ZIP · RAR</p>
                     </div>
                   )}
                   <input id="file-input" type="file"
-                    accept=".pdf,.doc,.docx,.xlsx,.xls,.zip,.rar,application/zip,application/x-zip-compressed,application/x-rar-compressed"
+                    accept=".pdf,.doc,.docx,.xlsx,.xls,.zip,.rar"
                     className="hidden" onChange={handleFileChange}/>
                 </div>
-                {fileError && <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                  {fileError}
-                </p>}
-                {file && !fileError && <p className="text-xs text-green-600 mt-1.5 flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                  File valid, siap diupload
-                </p>}
+                {fileError && <p className="text-xs text-red-600 mt-1.5">⚠ {fileError}</p>}
+                {file && !fileError && <p className="text-xs text-green-600 mt-1.5">✓ File valid, siap diupload</p>}
               </div>
 
               <div className="md:col-span-2">

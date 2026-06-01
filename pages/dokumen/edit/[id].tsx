@@ -5,6 +5,16 @@ import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
 
+// Progres otomatis berdasarkan status — tidak dapat diisi manual
+const STATUS_PROGRES: Record<string, number> = {
+  'Belum Direviu': 0,
+  'Dalam Proses': 50,
+  'Perlu Revisi': 25,
+  'Selesai': 100,
+}
+
+const STATUS_LIST = ['Belum Direviu', 'Dalam Proses', 'Perlu Revisi', 'Selesai']
+
 export default function EditDokumenPage() {
   const router = useRouter()
   const { id } = router.query
@@ -14,7 +24,7 @@ export default function EditDokumenPage() {
   const [form, setForm] = useState({
     nomor_laporan:'', nama_dokumen:'', kategori:'Perencanaan', pic:'',
     tanggal_diajukan:'', target_selesai:'', tanggal_selesai:'',
-    status:'Belum Direviu', progres:0, catatan:''
+    status:'Belum Direviu', catatan:''
   })
 
   useEffect(()=>{
@@ -29,29 +39,44 @@ export default function EditDokumenPage() {
         target_selesai: data.target_selesai||'',
         tanggal_selesai: data.tanggal_selesai||'',
         status: data.status||'Belum Direviu',
-        progres: data.progres||0,
         catatan: data.catatan||'',
       })
       setLoading(false)
     })
   },[id])
 
-  function set(k:string,v:string|number){setForm(f=>({...f,[k]:v}))}
+  function set(k:string,v:string){setForm(f=>({...f,[k]:v}))}
+
+  function handleStatusChange(newStatus: string) {
+    setForm(f=>({
+      ...f,
+      status: newStatus,
+      // Auto-set tanggal selesai jika status Selesai
+      tanggal_selesai: newStatus === 'Selesai' && !f.tanggal_selesai
+        ? new Date().toISOString().slice(0,10)
+        : newStatus !== 'Selesai' ? '' : f.tanggal_selesai
+    }))
+  }
+
+  const progresOtomatis = STATUS_PROGRES[form.status] ?? 0
 
   async function handleSave(e:React.FormEvent){
     e.preventDefault()
     if(!form.nama_dokumen||!form.nomor_laporan){setError('Nama dan nomor laporan wajib diisi');return}
     setSaving(true); setError('')
-    const today=new Date().toISOString()
+    const w = form.status==='Selesai'?'g':form.status==='Perlu Revisi'?'a':form.status==='Dalam Proses'?'b':'x'
     const {error:err}=await supabase.from('dokumen').update({
       ...form,
+      progres: progresOtomatis,
       target_selesai: form.target_selesai||null,
       tanggal_selesai: form.tanggal_selesai||null,
-      updated_at: today
+      updated_at: new Date().toISOString()
     }).eq('id',id)
     if(err){setError('Gagal menyimpan: '+err.message);setSaving(false);return}
     await supabase.from('riwayat').insert({
-      dokumen_id:id, keterangan:`Data dokumen diedit: ${form.status} (${form.progres}%)`, warna:'b'
+      dokumen_id:id,
+      keterangan:`Data dokumen diedit — Status: ${form.status} (${progresOtomatis}%)`,
+      warna: w
     })
     router.push('/dokumen')
   }
@@ -63,9 +88,7 @@ export default function EditDokumenPage() {
       <Head><title>Edit Dokumen — Monitoring Reviu</title></Head>
       <Layout>
         <div className="max-w-2xl space-y-5">
-          <div className="flex items-center gap-2">
-            <Link href="/dokumen" className="text-sm text-gray-500 hover:text-gray-700">← Kembali ke Daftar</Link>
-          </div>
+          <Link href="/dokumen" className="text-sm text-gray-500 hover:text-gray-700">← Kembali ke Daftar</Link>
           <div>
             <h1 className="text-lg font-semibold text-gray-900">Edit Dokumen</h1>
             <p className="text-sm text-gray-500">Perbarui data dokumen yang sudah diregistrasi</p>
@@ -94,21 +117,39 @@ export default function EditDokumenPage() {
                 <label className="label">Target Selesai</label>
                 <input type="date" className="input" value={form.target_selesai} onChange={e=>set('target_selesai',e.target.value)}/>
               </div>
+
+              {/* Status + Progres Otomatis */}
               <div>
-                <label className="label">Status</label>
-                <select className="input" value={form.status} onChange={e=>set('status',e.target.value)}>
-                  {['Belum Direviu','Dalam Proses','Perlu Revisi','Selesai'].map(s=><option key={s}>{s}</option>)}
+                <label className="label">Status Reviu</label>
+                <select className="input" value={form.status} onChange={e=>handleStatusChange(e.target.value)}>
+                  {STATUS_LIST.map(s=><option key={s}>{s}</option>)}
                 </select>
               </div>
               <div>
-                <label className="label">Progres (%)</label>
-                <input type="number" min={0} max={100} className="input" value={form.progres} onChange={e=>set('progres',+e.target.value)}/>
+                <label className="label">Progres <span className="text-xs text-gray-400 font-normal">(otomatis)</span></label>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width:`${progresOtomatis}%`,
+                        background: form.status==='Selesai'?'#16a34a':form.status==='Dalam Proses'?'#2563eb':form.status==='Perlu Revisi'?'#d97706':'#9ca3af'
+                      }}></div>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700 w-10">{progresOtomatis}%</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Belum Direviu=0% · Perlu Revisi=25% · Dalam Proses=50% · Selesai=100%
+                </p>
               </div>
+
               <div>
                 <label className="label">Tanggal Selesai Reviu</label>
                 <input type="date" className="input" value={form.tanggal_selesai} onChange={e=>set('tanggal_selesai',e.target.value)}/>
+                {form.status==='Selesai' && !form.tanggal_selesai && (
+                  <p className="text-xs text-amber-600 mt-1">⚠ Isi tanggal selesai untuk status Selesai</p>
+                )}
               </div>
-              <div className="md:col-span-2">
+              <div>
                 <label className="label">PIC / Unit Pemilik</label>
                 <input className="input" value={form.pic} onChange={e=>set('pic',e.target.value)}/>
               </div>
@@ -120,9 +161,7 @@ export default function EditDokumenPage() {
             {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
             <div className="flex gap-3 justify-end pt-2 border-t border-gray-100">
               <Link href="/dokumen" className="btn-secondary">Batal</Link>
-              <button type="submit" disabled={saving} className="btn-primary">
-                {saving?'Menyimpan...':'Simpan Perubahan'}
-              </button>
+              <button type="submit" disabled={saving} className="btn-primary">{saving?'Menyimpan...':'Simpan Perubahan'}</button>
             </div>
           </form>
         </div>

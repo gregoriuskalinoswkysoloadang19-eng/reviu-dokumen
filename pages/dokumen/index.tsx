@@ -21,11 +21,14 @@ export default function DokumenPage() {
   const [fStatus, setFStatus] = useState('')
   const [fKat, setFKat] = useState('')
   const [deleting, setDeleting] = useState<string|null>(null)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(()=>{fetchData()},[])
 
   async function fetchData() {
-    const {data}=await supabase.from('dokumen').select('*').order('created_at',{ascending:false})
+    setLoading(true)
+    const {data, error}=await supabase.from('dokumen').select('*').order('created_at',{ascending:false})
+    if(error) console.error('Fetch error:', error)
     setDok(data||[])
     setLoading(false)
   }
@@ -46,14 +49,31 @@ export default function DokumenPage() {
   }
 
   async function handleDelete(d:Dok) {
-    if(!confirm(`Hapus "${d.nama_dokumen}"? Tindakan ini tidak bisa dibatalkan.`)) return
+    if(!confirm(`Hapus dokumen "${d.nama_dokumen}"?\n\nTindakan ini tidak dapat dibatalkan.`)) return
     setDeleting(d.id)
-    if(d.file_url) await supabase.storage.from('dokumen-reviu').remove([d.file_url])
-    if(d.laporan_url) await supabase.storage.from('laporan-reviu').remove([d.laporan_url])
-    await supabase.from('riwayat').delete().eq('dokumen_id',d.id)
-    await supabase.from('dokumen').delete().eq('id',d.id)
-    setDeleting(null)
-    fetchData()
+    setDeleteError('')
+    try {
+      // Hapus file dari storage jika ada
+      if(d.file_url) {
+        await supabase.storage.from('dokumen-reviu').remove([d.file_url])
+      }
+      if(d.laporan_url) {
+        await supabase.storage.from('laporan-reviu').remove([d.laporan_url])
+      }
+      // Hapus riwayat dulu (foreign key)
+      const {error: rErr} = await supabase.from('riwayat').delete().eq('dokumen_id', d.id)
+      if(rErr) throw new Error('Gagal hapus riwayat: ' + rErr.message)
+      // Hapus dokumen
+      const {error: dErr} = await supabase.from('dokumen').delete().eq('id', d.id)
+      if(dErr) throw new Error('Gagal hapus dokumen: ' + dErr.message)
+      // Refresh data
+      await fetchData()
+    } catch(err: any) {
+      setDeleteError(err.message || 'Gagal menghapus dokumen')
+      console.error(err)
+    } finally {
+      setDeleting(null)
+    }
   }
 
   return (
@@ -72,7 +92,13 @@ export default function DokumenPage() {
             </Link>
           </div>
 
-          {/* Filters */}
+          {deleteError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 flex items-center justify-between">
+              <span>{deleteError}</span>
+              <button onClick={()=>setDeleteError('')} className="text-red-400 hover:text-red-600 ml-3">✕</button>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             <input className="input flex-1 min-w-48 max-w-xs" placeholder="Cari nama / nomor..." value={search} onChange={e=>setSearch(e.target.value)}/>
             <select className="input w-44" value={fStatus} onChange={e=>setFStatus(e.target.value)}>
@@ -85,10 +111,9 @@ export default function DokumenPage() {
             </select>
           </div>
 
-          {/* Table */}
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-xs" style={{tableLayout:'fixed',minWidth:'900px'}}>
+              <table className="w-full text-xs" style={{tableLayout:'fixed',minWidth:'960px'}}>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="text-left px-3 py-3 font-medium text-gray-500 w-7">No</th>
@@ -106,17 +131,17 @@ export default function DokumenPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {loading ? (
-                    <tr><td colSpan={11} className="text-center py-12 text-gray-400">Memuat data...</td></tr>
+                    <tr><td colSpan={11} className="text-center py-12 text-gray-400">
+                      <div className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>Memuat...</div>
+                    </td></tr>
                   ) : filtered.length===0 ? (
                     <tr><td colSpan={11} className="text-center py-12 text-gray-400">
                       {dok.length===0 ? <>Belum ada dokumen. <Link href="/register" className="text-blue-600 underline">Register sekarang</Link></> : 'Tidak ada dokumen ditemukan'}
                     </td></tr>
                   ) : filtered.map((d,i)=>(
-                    <tr key={d.id} className="hover:bg-gray-50">
+                    <tr key={d.id} className={`hover:bg-gray-50 ${deleting===d.id?'opacity-40':''}`}>
                       <td className="px-3 py-2.5 text-gray-400">{i+1}</td>
-                      <td className="px-3 py-2.5 font-medium text-gray-800">
-                        <div className="truncate" title={d.nama_dokumen}>{d.nama_dokumen}</div>
-                      </td>
+                      <td className="px-3 py-2.5 font-medium text-gray-800"><div className="truncate" title={d.nama_dokumen}>{d.nama_dokumen}</div></td>
                       <td className="px-3 py-2.5 text-gray-500 truncate">{d.nomor_laporan}</td>
                       <td className="px-3 py-2.5 text-gray-600">{d.kategori}</td>
                       <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{d.tanggal_diajukan}</td>
@@ -150,8 +175,12 @@ export default function DokumenPage() {
                           <span className="text-gray-200">|</span>
                           <Link href={`/dokumen/edit/${d.id}`} className="text-amber-600 hover:text-amber-800 font-medium">Edit</Link>
                           <span className="text-gray-200">|</span>
-                          <button onClick={()=>handleDelete(d)} disabled={deleting===d.id} className="text-red-500 hover:text-red-700 font-medium disabled:opacity-40">
-                            {deleting===d.id?'...':'Hapus'}
+                          <button
+                            onClick={()=>handleDelete(d)}
+                            disabled={!!deleting}
+                            className="text-red-500 hover:text-red-700 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {deleting===d.id?'Menghapus...':'Hapus'}
                           </button>
                         </div>
                       </td>
