@@ -5,15 +5,21 @@ import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
 
-// Progres otomatis berdasarkan status — tidak dapat diisi manual
 const STATUS_PROGRES: Record<string, number> = {
   'Belum Direviu': 0,
-  'Dalam Proses': 50,
   'Perlu Revisi': 25,
+  'Dalam Proses': 50,
+  'Penyusunan Laporan Hasil Reviu': 75,
   'Selesai': 100,
 }
-
-const STATUS_LIST = ['Belum Direviu', 'Dalam Proses', 'Perlu Revisi', 'Selesai']
+const STATUS_LIST = ['Belum Direviu','Dalam Proses','Perlu Revisi','Penyusunan Laporan Hasil Reviu','Selesai']
+const STATUS_COLOR: Record<string,string> = {
+  'Belum Direviu':'#9ca3af',
+  'Perlu Revisi':'#d97706',
+  'Dalam Proses':'#2563eb',
+  'Penyusunan Laporan Hasil Reviu':'#7c3aed',
+  'Selesai':'#16a34a',
+}
 
 export default function EditDokumenPage() {
   const router = useRouter()
@@ -51,7 +57,6 @@ export default function EditDokumenPage() {
     setForm(f=>({
       ...f,
       status: newStatus,
-      // Auto-set tanggal selesai jika status Selesai
       tanggal_selesai: newStatus === 'Selesai' && !f.tanggal_selesai
         ? new Date().toISOString().slice(0,10)
         : newStatus !== 'Selesai' ? '' : f.tanggal_selesai
@@ -64,7 +69,7 @@ export default function EditDokumenPage() {
     e.preventDefault()
     if(!form.nama_dokumen||!form.nomor_laporan){setError('Nama dan nomor laporan wajib diisi');return}
     setSaving(true); setError('')
-    const w = form.status==='Selesai'?'g':form.status==='Perlu Revisi'?'a':form.status==='Dalam Proses'?'b':'x'
+    const w = form.status==='Selesai'?'g':form.status==='Penyusunan Laporan Hasil Reviu'?'g':form.status==='Perlu Revisi'?'a':form.status==='Dalam Proses'?'b':'x'
     const {error:err}=await supabase.from('dokumen').update({
       ...form,
       progres: progresOtomatis,
@@ -75,7 +80,7 @@ export default function EditDokumenPage() {
     if(err){setError('Gagal menyimpan: '+err.message);setSaving(false);return}
     await supabase.from('riwayat').insert({
       dokumen_id:id,
-      keterangan:`Data dokumen diedit — Status: ${form.status} (${progresOtomatis}%)`,
+      keterangan:`Status diperbarui: ${form.status} (${progresOtomatis}%)`,
       warna: w
     })
     router.push('/dokumen')
@@ -130,15 +135,12 @@ export default function EditDokumenPage() {
                 <div className="flex items-center gap-3 mt-1">
                   <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width:`${progresOtomatis}%`,
-                        background: form.status==='Selesai'?'#16a34a':form.status==='Dalam Proses'?'#2563eb':form.status==='Perlu Revisi'?'#d97706':'#9ca3af'
-                      }}></div>
+                      style={{width:`${progresOtomatis}%`, background:STATUS_COLOR[form.status]}}></div>
                   </div>
                   <span className="text-sm font-semibold text-gray-700 w-10">{progresOtomatis}%</span>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  Belum Direviu=0% · Perlu Revisi=25% · Dalam Proses=50% · Selesai=100%
+                <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+                  Belum Direviu = 0% · Perlu Revisi = 25% · Dalam Proses = 50% · Penyusunan LHR = 75% · Selesai = 100%
                 </p>
               </div>
 
