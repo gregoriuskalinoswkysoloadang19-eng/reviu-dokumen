@@ -13,7 +13,17 @@ type Dok = {
   laporan_url:string|null; laporan_name:string|null; laporan_size:string|null
 }
 type Riw = {id:string; keterangan:string; warna:string; created_at:string}
-const WC:Record<string,string>={g:'#16a34a',b:'#2563eb',a:'#d97706',x:'#9ca3af'}
+
+const STATUS_PROGRES: Record<string,number> = {
+  'Belum Direviu':0,'Perlu Revisi':25,'Dalam Proses':50,
+  'Penyusunan Laporan Hasil Reviu':75,'Selesai':100
+}
+const STATUS_LIST = ['Belum Direviu','Dalam Proses','Perlu Revisi','Penyusunan Laporan Hasil Reviu','Selesai']
+const STATUS_COLOR: Record<string,string> = {
+  'Belum Direviu':'#9ca3af','Perlu Revisi':'#d97706','Dalam Proses':'#2563eb',
+  'Penyusunan Laporan Hasil Reviu':'#7c3aed','Selesai':'#16a34a'
+}
+const WC:Record<string,string>={g:'#16a34a',b:'#2563eb',a:'#d97706',x:'#9ca3af',v:'#7c3aed'}
 
 export default function DetailPage() {
   const router = useRouter()
@@ -24,7 +34,6 @@ export default function DetailPage() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [status, setStatus] = useState('')
-  const [progres, setProgres] = useState(0)
   const [tglSelesai, setTglSelesai] = useState('')
   const [catatan, setCatatan] = useState('')
   const [laporanFile, setLaporanFile] = useState<File|null>(null)
@@ -32,12 +41,12 @@ export default function DetailPage() {
   useEffect(()=>{ if(id) fetchData() },[id])
 
   async function fetchData() {
-    const [dr, rr]=await Promise.all([
+    const [dr,rr]=await Promise.all([
       supabase.from('dokumen').select('*').eq('id',id).single(),
       supabase.from('riwayat').select('*').eq('dokumen_id',id).order('created_at',{ascending:true})
     ])
     if(dr.data){
-      setDoc(dr.data); setStatus(dr.data.status); setProgres(dr.data.progres)
+      setDoc(dr.data); setStatus(dr.data.status)
       setTglSelesai(dr.data.tanggal_selesai||''); setCatatan(dr.data.catatan||'')
     }
     setRiw(rr.data||[]); setLoading(false)
@@ -50,9 +59,18 @@ export default function DetailPage() {
 
   async function saveStatus() {
     if(!doc) return; setSaving(true)
-    const w=status==='Selesai'?'g':status==='Perlu Revisi'?'a':status==='Dalam Proses'?'b':'x'
-    await supabase.from('dokumen').update({status,progres,tanggal_selesai:tglSelesai||null,updated_at:new Date().toISOString()}).eq('id',doc.id)
-    await supabase.from('riwayat').insert({dokumen_id:doc.id,keterangan:`Status diperbarui: ${status} (${progres}%)`,warna:w})
+    const progresOtomatis = STATUS_PROGRES[status] ?? 0
+    const w = status==='Selesai'?'g':status==='Penyusunan Laporan Hasil Reviu'?'v':status==='Perlu Revisi'?'a':status==='Dalam Proses'?'b':'x'
+    await supabase.from('dokumen').update({
+      status, progres:progresOtomatis,
+      tanggal_selesai:tglSelesai||null,
+      updated_at:new Date().toISOString()
+    }).eq('id',doc.id)
+    await supabase.from('riwayat').insert({
+      dokumen_id:doc.id,
+      keterangan:`Status diperbarui: ${status} (${progresOtomatis}%)`,
+      warna:w
+    })
     await fetchData(); setSaving(false)
   }
 
@@ -71,18 +89,25 @@ export default function DetailPage() {
     if(upErr){alert('Gagal upload: '+upErr.message);setUploading(false);return}
     const sz=laporanFile.size>1024*1024?`${(laporanFile.size/1024/1024).toFixed(1)} MB`:`${Math.round(laporanFile.size/1024)} KB`
     await supabase.from('dokumen').update({
-      laporan_url:path, laporan_name:laporanFile.name, laporan_size:sz,
+      laporan_url:path,laporan_name:laporanFile.name,laporan_size:sz,
       updated_at:new Date().toISOString()
     }).eq('id',doc.id)
-    await supabase.from('riwayat').insert({dokumen_id:doc.id,keterangan:`Laporan hasil reviu diupload: ${laporanFile.name}`,warna:'g'})
-    setLaporanFile(null)
-    await fetchData(); setUploading(false)
+    await supabase.from('riwayat').insert({
+      dokumen_id:doc.id,keterangan:`Laporan hasil reviu diupload: ${laporanFile.name}`,warna:'g'
+    })
+    setLaporanFile(null); await fetchData(); setUploading(false)
   }
 
   const badge=(s:string)=>{
-    const m:Record<string,string>={Selesai:'badge-selesai','Dalam Proses':'badge-proses','Belum Direviu':'badge-belum','Perlu Revisi':'badge-revisi'}
+    const m:Record<string,string>={
+      Selesai:'badge-selesai','Dalam Proses':'badge-proses',
+      'Belum Direviu':'badge-belum','Perlu Revisi':'badge-revisi',
+      'Penyusunan Laporan Hasil Reviu':'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700'
+    }
     return <span className={m[s]||'badge-belum'}>{s}</span>
   }
+
+  const progresOtomatis = STATUS_PROGRES[status] ?? 0
 
   if(loading) return <Layout><div className="flex justify-center items-center h-64"><div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div></Layout>
   if(!doc) return <Layout><div className="text-center py-12 text-gray-500">Dokumen tidak ditemukan.</div></Layout>
@@ -162,16 +187,16 @@ export default function DetailPage() {
             ) : (
               <div className="p-3 bg-gray-50 rounded-lg border border-dashed border-gray-200 text-sm text-gray-400 text-center mb-3">Belum ada laporan hasil reviu</div>
             )}
-            {/* Upload laporan */}
             <div className="mt-2">
               <p className="text-xs text-gray-500 mb-2">Upload laporan hasil reviu (PDF, DOCX, ZIP — maks 20MB)</p>
               <div className="flex gap-2 flex-wrap items-center">
                 <label className="flex-1 min-w-48">
                   <div className="border border-dashed border-gray-300 rounded-lg px-3 py-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors text-xs text-gray-500 text-center">
-                    {laporanFile ? <span className="text-blue-700 font-medium">{laporanFile.name} ({(laporanFile.size/1024).toFixed(0)} KB)</span> : '📎 Pilih file laporan...'}
+                    {laporanFile
+                      ? <span className="text-blue-700 font-medium">{laporanFile.name} ({(laporanFile.size/1024).toFixed(0)} KB)</span>
+                      : '📎 Pilih file laporan...'}
                   </div>
-                  <input type="file" accept=".pdf,.doc,.docx,.xlsx,.zip,.rar" className="hidden"
-                    onChange={e=>setLaporanFile(e.target.files?.[0]||null)}/>
+                  <input type="file" accept=".pdf,.doc,.docx,.xlsx,.zip,.rar" className="hidden" onChange={e=>setLaporanFile(e.target.files?.[0]||null)}/>
                 </label>
                 <button onClick={uploadLaporan} disabled={!laporanFile||uploading} className="btn-primary text-xs py-2 px-4 disabled:opacity-40">
                   {uploading?'Mengupload...':'Upload Laporan'}
@@ -183,32 +208,45 @@ export default function DetailPage() {
           {/* Update Status */}
           <div className="card p-5">
             <h2 className="text-sm font-medium text-gray-700 mb-3">Update Status Reviu</h2>
-            <div className="flex flex-wrap gap-3 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
               <div>
                 <label className="label">Status</label>
                 <select className="input" value={status} onChange={e=>setStatus(e.target.value)}>
-                  {['Belum Direviu','Dalam Proses','Perlu Revisi','Selesai'].map(s=><option key={s}>{s}</option>)}
+                  {STATUS_LIST.map(s=><option key={s}>{s}</option>)}
                 </select>
               </div>
               <div>
-                <label className="label">Progres (%)</label>
-                <input type="number" min={0} max={100} className="input w-24" value={progres} onChange={e=>setProgres(+e.target.value)}/>
+                <label className="label">Progres <span className="text-xs text-gray-400 font-normal">(otomatis)</span></label>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{width:`${progresOtomatis}%`,background:STATUS_COLOR[status]}}></div>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700 w-10">{progresOtomatis}%</span>
+                </div>
               </div>
-              <div>
-                <label className="label">Tanggal Selesai</label>
-                <input type="date" className="input" value={tglSelesai} onChange={e=>setTglSelesai(e.target.value)}/>
-              </div>
-              <button onClick={saveStatus} disabled={saving} className="btn-primary">{saving?'Menyimpan...':'Simpan'}</button>
             </div>
+            <div className="mb-3">
+              <label className="label">Tanggal Selesai</label>
+              <input type="date" className="input max-w-xs" value={tglSelesai} onChange={e=>setTglSelesai(e.target.value)}/>
+            </div>
+            {/* Legenda status */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
+              {STATUS_LIST.map(s=>(
+                <span key={s} className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:STATUS_COLOR[s]}}></span>
+                  {s} = {STATUS_PROGRES[s]}%
+                </span>
+              ))}
+            </div>
+            <button onClick={saveStatus} disabled={saving} className="btn-primary">{saving?'Menyimpan...':'Simpan Status'}</button>
           </div>
 
           {/* Catatan */}
           <div className="card p-5">
             <h2 className="text-sm font-medium text-gray-700 mb-3">Catatan Hasil Reviu</h2>
             <textarea className="input min-h-24 resize-y" value={catatan} onChange={e=>setCatatan(e.target.value)} placeholder="Tulis catatan reviu..."/>
-            <button onClick={saveCatatan} disabled={saving} className="btn-secondary mt-2 text-xs">
-              {saving?'Menyimpan...':'Simpan Catatan'}
-            </button>
+            <button onClick={saveCatatan} disabled={saving} className="btn-secondary mt-2 text-xs">{saving?'Menyimpan...':'Simpan Catatan'}</button>
           </div>
 
           {/* Riwayat */}
@@ -227,7 +265,7 @@ export default function DetailPage() {
                   </div>
                 </div>
               ))}
-              {riw.length===0 && <p className="text-sm text-gray-400">Belum ada riwayat aktivitas.</p>}
+              {riw.length===0 && <p className="text-sm text-gray-400">Belum ada riwayat.</p>}
             </div>
           </div>
         </div>
