@@ -7,11 +7,19 @@ import { supabase } from '@/lib/supabase'
 
 const STATUS_PROGRES: Record<string, number> = {
   'Belum Direviu': 0,
-  'Dalam Proses': 50,
   'Perlu Revisi': 25,
+  'Dalam Proses': 50,
+  'Penyusunan Laporan Hasil Reviu': 75,
   'Selesai': 100,
 }
-const STATUS_LIST = ['Belum Direviu', 'Dalam Proses', 'Perlu Revisi', 'Selesai']
+const STATUS_LIST = ['Belum Direviu','Dalam Proses','Perlu Revisi','Penyusunan Laporan Hasil Reviu','Selesai']
+const STATUS_COLOR: Record<string,string> = {
+  'Belum Direviu':'#9ca3af',
+  'Perlu Revisi':'#d97706',
+  'Dalam Proses':'#2563eb',
+  'Penyusunan Laporan Hasil Reviu':'#7c3aed',
+  'Selesai':'#16a34a',
+}
 const MAX_SIZE = 20 * 1024 * 1024
 
 export default function RegisterPage() {
@@ -28,10 +36,6 @@ export default function RegisterPage() {
 
   function set(k:string,v:string){setForm(f=>({...f,[k]:v}))}
 
-  function handleStatusChange(newStatus: string) {
-    setForm(f=>({...f, status: newStatus}))
-  }
-
   function validateFile(f:File):string {
     const ext = '.'+f.name.split('.').pop()?.toLowerCase()
     const allowed = ['.pdf','.doc','.docx','.xlsx','.xls','.zip','.rar']
@@ -42,8 +46,7 @@ export default function RegisterPage() {
 
   function handleFileChange(e:React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]||null
-    setFile(f)
-    setFileError(f ? validateFile(f) : '')
+    setFile(f); setFileError(f ? validateFile(f) : '')
   }
 
   const progresOtomatis = STATUS_PROGRES[form.status] ?? 0
@@ -64,8 +67,7 @@ export default function RegisterPage() {
     }
 
     const {data:inserted,error:insertErr}=await supabase.from('dokumen').insert({
-      ...form,
-      progres: progresOtomatis,
+      ...form, progres: progresOtomatis,
       target_selesai: form.target_selesai||null,
       laporan_url:null, laporan_name:null, laporan_size:null,
       file_url, file_name, file_size,
@@ -112,7 +114,7 @@ export default function RegisterPage() {
               {/* Status + Progres Otomatis */}
               <div>
                 <label className="label">Status Awal</label>
-                <select className="input" value={form.status} onChange={e=>handleStatusChange(e.target.value)}>
+                <select className="input" value={form.status} onChange={e=>set('status',e.target.value)}>
                   {STATUS_LIST.map(s=><option key={s}>{s}</option>)}
                 </select>
               </div>
@@ -121,14 +123,10 @@ export default function RegisterPage() {
                 <div className="flex items-center gap-3 mt-1">
                   <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width:`${progresOtomatis}%`,
-                        background: form.status==='Selesai'?'#16a34a':form.status==='Dalam Proses'?'#2563eb':form.status==='Perlu Revisi'?'#d97706':'#9ca3af'
-                      }}></div>
+                      style={{width:`${progresOtomatis}%`, background:STATUS_COLOR[form.status]}}></div>
                   </div>
                   <span className="text-sm font-semibold text-gray-700 w-10">{progresOtomatis}%</span>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Otomatis: Belum=0% · Revisi=25% · Proses=50% · Selesai=100%</p>
               </div>
 
               <div>
@@ -144,7 +142,6 @@ export default function RegisterPage() {
                 <input className="input" value={form.pic} onChange={e=>set('pic',e.target.value)} placeholder="Nama bidang atau unit pengirim"/>
               </div>
 
-              {/* File Upload */}
               <div className="md:col-span-2">
                 <label className="label">
                   Upload File Dokumen
@@ -168,9 +165,7 @@ export default function RegisterPage() {
                       <p className="text-xs text-gray-400 mt-0.5">Mendukung: PDF · DOCX · XLSX · ZIP · RAR</p>
                     </div>
                   )}
-                  <input id="file-input" type="file"
-                    accept=".pdf,.doc,.docx,.xlsx,.xls,.zip,.rar"
-                    className="hidden" onChange={handleFileChange}/>
+                  <input id="file-input" type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.zip,.rar" className="hidden" onChange={handleFileChange}/>
                 </div>
                 {fileError && <p className="text-xs text-red-600 mt-1.5">⚠ {fileError}</p>}
                 {file && !fileError && <p className="text-xs text-green-600 mt-1.5">✓ File valid, siap diupload</p>}
