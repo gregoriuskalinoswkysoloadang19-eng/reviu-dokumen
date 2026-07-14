@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import {
   LayoutDashboard, FileText, FilePlus2, BarChart3, History, Download, Users2,
-  Bell, Menu, PanelLeftClose, PanelLeftOpen, LogOut, Search,
+  Bell, Menu, PanelLeftClose, PanelLeftOpen, LogOut, Search, FolderOpen,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -22,6 +22,7 @@ const NAV_GROUPS = [
     label: 'Menu Utama',
     items: [
       { href: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
+      { href: '/repositori', label: 'Document Repository', icon: FolderOpen, adminOnly: false },
       { href: '/dokumen', label: 'Daftar Dokumen', icon: FileText, adminOnly: false },
       { href: '/register', label: 'Register Dokumen', icon: FilePlus2, adminOnly: false },
       { href: '/rekapitulasi', label: 'Rekapitulasi', icon: BarChart3, adminOnly: false },

@@ -1,302 +1,483 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, PieChart, Pie, Cell,
+} from 'recharts'
+import {
+  FileText, Loader2 as LoaderIcon, RefreshCcw, CheckCircle2, FileClock,
+  AlertTriangle, TrendingUp, FilePlus2, BarChart3, Download, ListChecks,
+  CalendarClock, UserCheck, Activity, Award, ClipboardList,
+} from 'lucide-react'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
-import { STATUS_COLOR, STATUS_BADGE } from '@/lib/constants'
+import { WARNA_RIWAYAT } from '@/lib/constants'
+import { Card, CardHeader, CardTitle, CardContent, Skeleton, EmptyState, ProgressBar } from '@/components/ui'
+import StatCard from '@/components/ui/StatCard'
+import { DocumentRow, type DocLite } from '@/components/DocumentCard'
 
-type Dok = {
-  id:string; nomor_laporan:string; nama_dokumen:string; kategori:string
-  status:string; progres:number; tanggal_diajukan:string
-  target_selesai:string|null; tanggal_selesai:string|null
-  pic:string|null; file_url:string|null; laporan_url:string|null
+type Dok = DocLite & {
+  tanggal_diajukan: string
+  target_selesai: string | null
+  tanggal_selesai: string | null
+  file_url: string | null
+}
+
+type Riwayat = { id: string; dokumen_id: string; keterangan: string; warna: string; created_at: string }
+
+const ROLE_LABEL: Record<string, string> = { admin: 'Administrator', operator: 'Operator', pimpinan: 'Pimpinan' }
+const PIE_COLORS = ['#16a34a', '#7c3aed', '#2563eb', '#d97706', '#9ca3af']
+
+function greetingFor(hour: number) {
+  if (hour < 11) return 'Selamat Pagi'
+  if (hour < 15) return 'Selamat Siang'
+  if (hour < 18) return 'Selamat Sore'
+  return 'Selamat Malam'
+}
+
+function pctChange(current: number, previous: number) {
+  if (previous === 0) return current > 0 ? 100 : 0
+  return Math.round(((current - previous) / previous) * 100)
 }
 
 export default function DashboardPage() {
   const [dok, setDok] = useState<Dok[]>([])
+  const [riwayat, setRiwayat] = useState<Riwayat[]>([])
+  const [userName, setUserName] = useState('')
+  const [userRole, setUserRole] = useState('')
   const [loading, setLoading] = useState(true)
+  const [now] = useState(() => new Date())
 
   useEffect(() => {
-    supabase.from('dokumen').select('*').order('created_at', { ascending: false })
-      .then(({ data }) => { setDok(data || []); setLoading(false) })
+    async function load() {
+      const [{ data: userRes }, { data: docs }, { data: hist }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.from('dokumen').select('*').order('created_at', { ascending: false }),
+        supabase.from('riwayat').select('*').order('created_at', { ascending: false }).limit(8),
+      ])
+      if (userRes?.user) {
+        const { data: profile } = await supabase.from('users').select('nama,role').eq('id', userRes.user.id).single()
+        if (profile) { setUserName(profile.nama); setUserRole(profile.role) }
+        else setUserName(userRes.user.email || '')
+      }
+      setDok(docs || [])
+      setRiwayat(hist || [])
+      setLoading(false)
+    }
+    load()
   }, [])
 
-  const total = dok.length
-  const selesai = dok.filter(d => d.status === 'Selesai').length
-  const proses = dok.filter(d => d.status === 'Dalam Proses').length
-  const revisi = dok.filter(d => d.status === 'Perlu Revisi').length
-  const penyusunan = dok.filter(d => d.status === 'Penyusunan Laporan Hasil Reviu').length
-  const belum = dok.filter(d => d.status === 'Belum Direviu').length
-  const sisa = total - selesai
-  const pct = total ? Math.round(selesai / total * 100) : 0
+  const stats = useMemo(() => {
+    const total = dok.length
+    const belum = dok.filter(d => d.status === 'Belum Direviu').length
+    const proses = dok.filter(d => d.status === 'Dalam Proses').length
+    const revisi = dok.filter(d => d.status === 'Perlu Revisi').length
+    const penyusunan = dok.filter(d => d.status === 'Penyusunan Laporan Hasil Reviu').length
+    const selesai = dok.filter(d => d.status === 'Selesai').length
+    const overdue = dok.filter(d => d.target_selesai && d.status !== 'Selesai' && new Date(d.target_selesai) < now)
+    const pctSelesai = total ? Math.round((selesai / total) * 100) : 0
 
-  const today = new Date()
-  const overdue = dok.filter(d => d.target_selesai && d.status !== 'Selesai' && new Date(d.target_selesai) < today)
-  const h1 = dok.filter(d => {
-    if (!d.target_selesai || d.status === 'Selesai') return false
-    const diff = Math.ceil((new Date(d.target_selesai).getTime() - today.getTime()) / 86400000)
-    return diff >= 0 && diff <= 1
-  })
-  const h3 = dok.filter(d => {
-    if (!d.target_selesai || d.status === 'Selesai') return false
-    const diff = Math.ceil((new Date(d.target_selesai).getTime() - today.getTime()) / 86400000)
-    return diff >= 0 && diff <= 3
-  })
-  const h7 = dok.filter(d => {
-    if (!d.target_selesai || d.status === 'Selesai') return false
-    const diff = Math.ceil((new Date(d.target_selesai).getTime() - today.getTime()) / 86400000)
-    return diff >= 0 && diff <= 7
-  })
+    const thisMonth = now.getMonth(), thisYear = now.getFullYear()
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const inMonth = (dateStr: string, m: number, y: number) => {
+      const d = new Date(dateStr); return d.getMonth() === m && d.getFullYear() === y
+    }
+    const totalThisMonth = dok.filter(d => inMonth(d.tanggal_diajukan, thisMonth, thisYear)).length
+    const totalLastMonth = dok.filter(d => inMonth(d.tanggal_diajukan, lastMonthDate.getMonth(), lastMonthDate.getFullYear())).length
+    const selesaiThisMonth = dok.filter(d => d.tanggal_selesai && inMonth(d.tanggal_selesai, thisMonth, thisYear)).length
+    const selesaiLastMonth = dok.filter(d => d.tanggal_selesai && inMonth(d.tanggal_selesai, lastMonthDate.getMonth(), lastMonthDate.getFullYear())).length
 
-  // Grafik per kategori
-  const katData = ['Perencanaan', 'Keuangan', 'Kinerja'].map(k => ({
+    return {
+      total, belum, proses, revisi, penyusunan, selesai, overdue, pctSelesai,
+      totalTrend: pctChange(totalThisMonth, totalLastMonth),
+      selesaiTrend: pctChange(selesaiThisMonth, selesaiLastMonth),
+      totalThisMonth, selesaiThisMonth,
+    }
+  }, [dok, now])
+
+  const upcomingDeadlines = useMemo(() => {
+    return dok
+      .filter(d => d.target_selesai && d.status !== 'Selesai')
+      .map(d => ({ ...d, diff: Math.ceil((new Date(d.target_selesai!).getTime() - now.getTime()) / 86400000) }))
+      .filter(d => d.diff <= 7)
+      .sort((a, b) => a.diff - b.diff)
+  }, [dok, now])
+
+  const todaysTasks = useMemo(() => {
+    return dok.filter(d => {
+      if (!d.target_selesai || d.status === 'Selesai') return false
+      const t = new Date(d.target_selesai)
+      return t.toDateString() === now.toDateString() || (t < now)
+    }).slice(0, 6)
+  }, [dok, now])
+
+  const myDocuments = useMemo(
+    () => (userName ? dok.filter(d => d.pic === userName) : []),
+    [dok, userName]
+  )
+
+  const trenBulanan = useMemo(() => Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+    return {
+      name: d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' }),
+      Masuk: dok.filter(x => { const t = new Date(x.tanggal_diajukan); return t.getMonth() === d.getMonth() && t.getFullYear() === d.getFullYear() }).length,
+      Selesai: dok.filter(x => x.tanggal_selesai && new Date(x.tanggal_selesai).getMonth() === d.getMonth() && new Date(x.tanggal_selesai).getFullYear() === d.getFullYear()).length,
+    }
+  }), [dok, now])
+
+  const kategoriData = useMemo(() => ['Perencanaan', 'Keuangan', 'Kinerja'].map(k => ({
     name: k,
     Selesai: dok.filter(d => d.kategori === k && d.status === 'Selesai').length,
     'Dalam Proses': dok.filter(d => d.kategori === k && d.status === 'Dalam Proses').length,
     'Perlu Revisi': dok.filter(d => d.kategori === k && d.status === 'Perlu Revisi').length,
     'Belum Direviu': dok.filter(d => d.kategori === k && d.status === 'Belum Direviu').length,
-  }))
+  })), [dok])
 
-  // Tren bulanan (6 bulan terakhir)
-  const trenData = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(); d.setMonth(d.getMonth() - (5 - i))
-    const bln = d.getMonth(); const thn = d.getFullYear()
-    const label = d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' })
-    return {
-      name: label,
-      Masuk: dok.filter(x => { const t = new Date(x.tanggal_diajukan); return t.getMonth()===bln && t.getFullYear()===thn }).length,
-      Selesai: dok.filter(x => { if(!x.tanggal_selesai) return false; const t = new Date(x.tanggal_selesai); return t.getMonth()===bln && t.getFullYear()===thn }).length,
-    }
-  })
+  const pieData = useMemo(() => ([
+    { name: 'Selesai', value: stats.selesai },
+    { name: 'Penyusunan LHR', value: stats.penyusunan },
+    { name: 'Dalam Proses', value: stats.proses },
+    { name: 'Perlu Revisi', value: stats.revisi },
+    { name: 'Belum Direviu', value: stats.belum },
+  ].filter(d => d.value > 0)), [stats])
 
-  // Pie data
-  const pieData = [
-    { name: 'Selesai', value: selesai },
-    { name: 'Penyusunan LHR', value: penyusunan },
-    { name: 'Dalam Proses', value: proses },
-    { name: 'Perlu Revisi', value: revisi },
-    { name: 'Belum Direviu', value: belum },
-  ].filter(d => d.value > 0)
+  const teamProductivity = useMemo(() => {
+    const byPic: Record<string, { Selesai: number; Aktif: number }> = {}
+    dok.forEach(d => {
+      const pic = d.pic || 'Belum Ditentukan'
+      byPic[pic] = byPic[pic] || { Selesai: 0, Aktif: 0 }
+      if (d.status === 'Selesai') byPic[pic].Selesai++
+      else byPic[pic].Aktif++
+    })
+    return Object.entries(byPic)
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => (b.Selesai + b.Aktif) - (a.Selesai + a.Aktif))
+      .slice(0, 6)
+  }, [dok])
 
-  const PIE_COLORS = ['#16a34a','#7c3aed','#2563eb','#d97706','#9ca3af']
+  const avgProcessingDays = useMemo(() => {
+    const done = dok.filter(d => d.tanggal_selesai)
+    if (!done.length) return null
+    const totalDays = done.reduce((sum, d) => {
+      const start = new Date(d.tanggal_diajukan).getTime()
+      const end = new Date(d.tanggal_selesai!).getTime()
+      return sum + Math.max(0, (end - start) / 86400000)
+    }, 0)
+    return Math.round(totalDays / done.length)
+  }, [dok])
 
-  const diffDays = (tgl: string) => Math.ceil((new Date(tgl).getTime() - today.getTime()) / 86400000)
-
-  if (loading) return (
-    <Layout>
-      <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    </Layout>
-  )
+  const docsById = useMemo(() => Object.fromEntries(dok.map(d => [d.id, d])), [dok])
 
   return (
     <>
       <Head><title>Dashboard — DRES | Inspectorate of West Sumba Regency</title></Head>
       <Layout>
-        <div className="space-y-5">
-          <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="space-y-6 pb-4">
+          {/* Greeting header */}
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">Dashboard</h1>
-              <p className="text-sm text-gray-500">DRES · Document Review & Evaluation System — Inspectorate of West Sumba Regency</p>
-            </div>
-            <Link href="/register" className="btn-primary flex items-center gap-2 text-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-              Register Dokumen
-            </Link>
-          </div>
-
-          {/* Banner kosong */}
-          {total === 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-              <strong>Belum ada dokumen.</strong> Mulai dengan <Link href="/register" className="underline font-medium">mendaftarkan dokumen baru</Link>.
-            </div>
-          )}
-
-          {/* Alert overdue & deadline */}
-          {overdue.length > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-              <p className="text-sm font-semibold text-red-800 mb-2">⚠️ {overdue.length} dokumen melewati deadline!</p>
-              <div className="flex flex-wrap gap-2">
-                {overdue.slice(0,3).map(d => (
-                  <Link key={d.id} href={`/dokumen/${d.id}`}
-                    className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-lg hover:bg-red-200 truncate max-w-[200px]">
-                    {d.nama_dokumen}
-                  </Link>
-                ))}
-                {overdue.length > 3 && <span className="text-xs text-red-600">+{overdue.length-3} lainnya</span>}
-              </div>
-            </div>
-          )}
-
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {[
-              { label:'Total Masuk', value:total, color:'text-blue-700', bg:'bg-blue-50' },
-              { label:'Selesai Direviu', value:selesai, color:'text-green-700', bg:'bg-green-50' },
-              { label:'Dalam Proses', value:proses, color:'text-blue-600', bg:'bg-blue-50' },
-              { label:'Penyusunan LHR', value:penyusunan, color:'text-purple-700', bg:'bg-purple-50' },
-              { label:'Perlu Revisi', value:revisi, color:'text-amber-700', bg:'bg-amber-50' },
-              { label:'Overdue', value:overdue.length, color:'text-red-700', bg:'bg-red-50' },
-            ].map(m => (
-              <div key={m.label} className={`card p-4 ${m.bg}`}>
-                <p className="text-xs text-gray-500 leading-tight">{m.label}</p>
-                <p className={`text-3xl font-bold mt-1 ${m.color}`}>{m.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Charts row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Bar chart */}
-            <div className="card p-5 lg:col-span-2">
-              <h2 className="text-sm font-semibold text-gray-700 mb-4">Progres per Kategori</h2>
-              {total === 0 ? <div className="flex items-center justify-center h-40 text-gray-400 text-sm">Belum ada data</div> : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={katData} barSize={14}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                    <XAxis dataKey="name" tick={{fontSize:11}}/>
-                    <YAxis tick={{fontSize:11}} allowDecimals={false}/>
-                    <Tooltip/>
-                    <Bar dataKey="Selesai" fill="#16a34a" radius={[2,2,0,0]}/>
-                    <Bar dataKey="Dalam Proses" fill="#2563eb" radius={[2,2,0,0]}/>
-                    <Bar dataKey="Perlu Revisi" fill="#d97706" radius={[2,2,0,0]}/>
-                    <Bar dataKey="Belum Direviu" fill="#d1d5db" radius={[2,2,0,0]}/>
-                  </BarChart>
-                </ResponsiveContainer>
+              {loading ? (
+                <Skeleton className="h-7 w-64 rounded-md" />
+              ) : (
+                <h1 className="font-display text-xl font-semibold text-ink-primary">
+                  {greetingFor(now.getHours())}{userName ? `, ${userName.split(' ')[0]}` : ''} 👋
+                </h1>
               )}
+              <p className="mt-1 text-sm text-ink-tertiary">
+                {userRole && <span className="mr-1.5 font-medium text-ink-secondary">{ROLE_LABEL[userRole] || userRole} ·</span>}
+                {now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                {' · '}Berikut ringkasan beban kerja Anda hari ini.
+              </p>
             </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/register" className="inline-flex h-10 items-center gap-2 rounded-lg bg-gradient-to-br from-brand-500 to-accent-500 px-4 text-sm font-medium text-white shadow-soft-sm transition-all duration-200 hover:brightness-105 hover:shadow-soft-md">
+                <FilePlus2 className="h-4 w-4" /> Register Dokumen
+              </Link>
+              <Link href="/dokumen" className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface-raised px-4 text-sm font-medium text-ink-primary transition-colors duration-200 hover:bg-surface-sunken">
+                <FileText className="h-4 w-4" /> Semua Dokumen
+              </Link>
+            </div>
+          </div>
 
-            {/* Pie + ringkasan */}
-            <div className="card p-5">
-              <h2 className="text-sm font-semibold text-gray-700 mb-2">Distribusi Status</h2>
-              {total === 0 ? <div className="flex items-center justify-center h-40 text-gray-400 text-sm">Belum ada data</div> : (
-                <>
-                  <div className="flex justify-center">
-                    <PieChart width={140} height={140}>
-                      <Pie data={pieData} cx={65} cy={65} innerRadius={35} outerRadius={60} dataKey="value" paddingAngle={2}>
-                        {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]}/>)}
-                      </Pie>
-                    </PieChart>
-                  </div>
-                  <div className="text-center mb-3">
-                    <span className="text-2xl font-bold text-green-700">{pct}%</span>
-                    <span className="text-xs text-gray-500 ml-1">selesai</span>
-                  </div>
-                  {pieData.map((d, i) => (
-                    <div key={d.name} className="flex items-center justify-between text-xs py-0.5 border-b border-gray-50 last:border-0">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{background:PIE_COLORS[i]}}></span>
-                        <span className="truncate max-w-[120px]">{d.name}</span>
-                      </span>
-                      <span className="font-semibold">{d.value}</span>
-                    </div>
+          {/* Overdue banner */}
+          {!loading && stats.overdue.length > 0 && (
+            <div className="flex items-start gap-3 rounded-xl border border-danger/30 bg-danger-subtle p-4">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger-strong" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-danger-strong">{stats.overdue.length} dokumen melewati tenggat waktu</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {stats.overdue.slice(0, 4).map(d => (
+                    <Link key={d.id} href={`/dokumen/${d.id}`} className="max-w-[220px] truncate rounded-md bg-white/60 px-2 py-1 text-xs font-medium text-danger-strong hover:bg-white dark:bg-black/10">
+                      {d.nama_dokumen}
+                    </Link>
                   ))}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Tren bulanan */}
-          <div className="card p-5">
-            <h2 className="text-sm font-semibold text-gray-700 mb-4">Tren Bulanan (6 Bulan Terakhir)</h2>
-            <ResponsiveContainer width="100%" height={160}>
-              <LineChart data={trenData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                <XAxis dataKey="name" tick={{fontSize:11}}/>
-                <YAxis tick={{fontSize:11}} allowDecimals={false}/>
-                <Tooltip/>
-                <Line type="monotone" dataKey="Masuk" stroke="#2563eb" strokeWidth={2} dot={{r:3}}/>
-                <Line type="monotone" dataKey="Selesai" stroke="#16a34a" strokeWidth={2} dot={{r:3}}/>
-              </LineChart>
-            </ResponsiveContainer>
-            <div className="flex gap-4 mt-2 justify-center">
-              <span className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-4 h-0.5 bg-blue-600 rounded"></span>Dokumen Masuk</span>
-              <span className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-4 h-0.5 bg-green-600 rounded"></span>Selesai Direviu</span>
-            </div>
-          </div>
-
-          {/* Deadline mendekat */}
-          {h7.length > 0 && (
-            <div className="card">
-              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-gray-700">⏰ Deadline Mendekat</h2>
-                <div className="flex gap-2 text-xs">
-                  {h1.length > 0 && <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">H-1: {h1.length}</span>}
-                  {h3.length > 0 && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">H-3: {h3.length}</span>}
-                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">H-7: {h7.length}</span>
+                  {stats.overdue.length > 4 && <span className="self-center text-xs text-danger-strong">+{stats.overdue.length - 4} lainnya</span>}
                 </div>
               </div>
-              <div className="divide-y divide-gray-50">
-                {h7.slice(0,5).map(d => {
-                  const diff = diffDays(d.target_selesai!)
-                  const urgent = diff <= 1
-                  const warn = diff <= 3
-                  return (
-                    <Link key={d.id} href={`/dokumen/${d.id}`}
-                      className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{d.nama_dokumen}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{d.nomor_laporan} · {d.kategori}</p>
-                      </div>
-                      <div className="text-right flex-shrink-0 ml-3">
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${urgent?'bg-red-100 text-red-700':warn?'bg-amber-100 text-amber-700':'bg-blue-100 text-blue-700'}`}>
-                          {diff === 0 ? 'Hari ini!' : `H-${diff}`}
-                        </span>
-                        <p className="text-xs text-gray-400 mt-1">{d.target_selesai}</p>
-                      </div>
-                    </Link>
-                  )
-                })}
-              </div>
             </div>
           )}
 
-          {/* Dokumen terbaru */}
-          {total > 0 && (
-            <div className="card">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-                <h2 className="text-sm font-semibold text-gray-700">Dokumen Terbaru</h2>
-                <Link href="/dokumen" className="text-xs text-blue-600 hover:text-blue-700">Lihat semua →</Link>
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+            <StatCard loading={loading} label="Total Dokumen" value={stats.total} icon={FileText} tone="brand"
+              trend={{ value: stats.totalTrend }} description={`${stats.totalThisMonth} masuk bulan ini`} href="/dokumen" />
+            <StatCard loading={loading} label="Belum Direviu" value={stats.belum} icon={FileClock} tone="neutral"
+              description="Menunggu tindak lanjut" />
+            <StatCard loading={loading} label="Dalam Proses (Reviu)" value={stats.proses} icon={LoaderIcon} tone="info"
+              description="Sedang direviu tim" />
+            <StatCard loading={loading} label="Perlu Revisi" value={stats.revisi} icon={RefreshCcw} tone="warning"
+              description="Menunggu perbaikan" />
+            <StatCard loading={loading} label="Penyusunan Laporan" value={stats.penyusunan} icon={ClipboardList} tone="brand"
+              description="Tahap evaluasi akhir" />
+            <StatCard loading={loading} label="Selesai" value={stats.selesai} icon={CheckCircle2} tone="success"
+              trend={{ value: stats.selesaiTrend }} description={`${stats.selesaiThisMonth} selesai bulan ini`} />
+            <StatCard loading={loading} label="Overdue" value={stats.overdue.length} icon={AlertTriangle} tone="danger"
+              description="Lewat tenggat waktu" />
+            <StatCard loading={loading} label="Progres Bulanan" value={`${stats.pctSelesai}%`} icon={TrendingUp} tone="brand"
+              description="Tingkat penyelesaian keseluruhan" />
+          </div>
+
+          {/* Main grid: left = tasks & documents, right = activity & performance */}
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+            <div className="space-y-5 xl:col-span-2">
+              {/* Today's tasks */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-1.5"><ListChecks className="h-4 w-4 text-brand-600" /> Tugas Hari Ini</CardTitle>
+                  </div>
+                  {todaysTasks.length > 0 && <span className="rounded-full bg-danger-subtle px-2 py-0.5 text-[11px] font-medium text-danger-strong">{todaysTasks.length}</span>}
+                </CardHeader>
+                <CardContent className="p-2">
+                  {loading ? (
+                    <div className="space-y-2 p-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}</div>
+                  ) : todaysTasks.length === 0 ? (
+                    <EmptyState title="Tidak ada tugas mendesak" description="Semua dokumen dalam kondisi terkendali hari ini." />
+                  ) : (
+                    <div className="space-y-1">
+                      {todaysTasks.map(d => <DocumentRow key={d.id} doc={d} overdue={new Date(d.target_selesai!) < now} />)}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Upcoming deadlines */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-1.5"><CalendarClock className="h-4 w-4 text-brand-600" /> Tenggat Mendekat (7 Hari)</CardTitle>
+                  <Link href="/dokumen" className="text-xs font-medium text-brand-600 hover:text-brand-700">Lihat semua →</Link>
+                </CardHeader>
+                <CardContent className="p-2">
+                  {loading ? (
+                    <div className="space-y-2 p-3">{[1, 2].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}</div>
+                  ) : upcomingDeadlines.length === 0 ? (
+                    <EmptyState title="Tidak ada tenggat dalam 7 hari" description="Jadwal Anda aman untuk saat ini." />
+                  ) : (
+                    <div className="space-y-1">
+                      {upcomingDeadlines.slice(0, 6).map(d => <DocumentRow key={d.id} doc={d} overdue={d.diff < 0} />)}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* My assigned documents */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-1.5"><UserCheck className="h-4 w-4 text-brand-600" /> Dokumen Ditugaskan ke Saya</CardTitle>
+                  <span className="text-xs text-ink-tertiary">{myDocuments.length} dokumen</span>
+                </CardHeader>
+                <CardContent className="p-2">
+                  {loading ? (
+                    <div className="space-y-2 p-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}</div>
+                  ) : myDocuments.length === 0 ? (
+                    <EmptyState title="Belum ada dokumen yang ditugaskan" description="Dokumen dengan PIC atas nama Anda akan tampil di sini." />
+                  ) : (
+                    <div className="space-y-1">
+                      {myDocuments.slice(0, 6).map(d => <DocumentRow key={d.id} doc={d} overdue={!!d.target_selesai && d.status !== 'Selesai' && new Date(d.target_selesai) < now} />)}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Charts: monthly trend + category progress */}
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                <Card>
+                  <CardHeader><CardTitle>Tren Dokumen Bulanan</CardTitle></CardHeader>
+                  <CardContent>
+                    {loading ? <Skeleton className="h-40 w-full rounded-lg" /> : (
+                      <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={trenBulanan}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                          <Tooltip />
+                          <Line type="monotone" dataKey="Masuk" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="Selesai" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader><CardTitle>Progres Reviu per Kategori</CardTitle></CardHeader>
+                  <CardContent>
+                    {loading ? <Skeleton className="h-40 w-full rounded-lg" /> : (
+                      <ResponsiveContainer width="100%" height={180}>
+                        <BarChart data={kategoriData} barSize={14}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                          <Tooltip />
+                          <Bar dataKey="Selesai" fill="#16a34a" radius={[2, 2, 0, 0]} />
+                          <Bar dataKey="Dalam Proses" fill="#2563eb" radius={[2, 2, 0, 0]} />
+                          <Bar dataKey="Perlu Revisi" fill="#d97706" radius={[2, 2, 0, 0]} />
+                          <Bar dataKey="Belum Direviu" fill="#d1d5db" radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      {['No','Nama Dokumen','Kategori','PIC','Tgl Diajukan','Status','Progres'].map(h => (
-                        <th key={h} className="text-left px-4 py-2.5 font-medium text-gray-500">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dok.slice(0, 5).map((d, i) => (
-                      <tr key={d.id} className="border-t border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-2.5 text-gray-400">{i+1}</td>
-                        <td className="px-4 py-2.5 font-medium text-gray-800 max-w-[160px]">
-                          <Link href={`/dokumen/${d.id}`} className="hover:text-blue-600 truncate block">{d.nama_dokumen}</Link>
-                        </td>
-                        <td className="px-4 py-2.5 text-gray-600">{d.kategori}</td>
-                        <td className="px-4 py-2.5 text-gray-500 max-w-[100px] truncate">{d.pic||'—'}</td>
-                        <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">{d.tanggal_diajukan}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={STATUS_BADGE[d.status]||'badge-belum'}>{d.status}</span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full" style={{width:`${d.progres}%`,background:STATUS_COLOR[d.status]}}></div>
-                            </div>
-                            <span className="text-gray-500">{d.progres}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+
+              {/* Team productivity */}
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-1.5"><Award className="h-4 w-4 text-brand-600" /> Produktivitas Tim (per PIC)</CardTitle></CardHeader>
+                <CardContent>
+                  {loading ? <Skeleton className="h-40 w-full rounded-lg" /> : teamProductivity.length === 0 ? (
+                    <EmptyState title="Belum ada data PIC" description="Tetapkan PIC pada dokumen untuk melihat produktivitas tim." />
+                  ) : (
+                    <ResponsiveContainer width="100%" height={Math.max(160, teamProductivity.length * 36)}>
+                      <BarChart data={teamProductivity} layout="vertical" margin={{ left: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={100} />
+                        <Tooltip />
+                        <Bar dataKey="Selesai" stackId="a" fill="#16a34a" radius={[0, 0, 0, 0]} />
+                        <Bar dataKey="Aktif" stackId="a" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-          )}
+
+            {/* Right column */}
+            <div className="space-y-5">
+              {/* Status distribution */}
+              <Card>
+                <CardHeader><CardTitle>Distribusi Status</CardTitle></CardHeader>
+                <CardContent>
+                  {loading ? <Skeleton className="h-40 w-full rounded-lg" /> : stats.total === 0 ? (
+                    <EmptyState title="Belum ada dokumen" description="Data akan muncul setelah dokumen pertama diregistrasi." />
+                  ) : (
+                    <>
+                      <div className="flex justify-center">
+                        <PieChart width={150} height={150}>
+                          <Pie data={pieData} cx={70} cy={70} innerRadius={38} outerRadius={65} dataKey="value" paddingAngle={2}>
+                            {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                          </Pie>
+                        </PieChart>
+                      </div>
+                      <div className="mb-3 text-center">
+                        <span className="font-display text-2xl font-semibold text-success-strong">{stats.pctSelesai}%</span>
+                        <span className="ml-1 text-xs text-ink-tertiary">selesai</span>
+                      </div>
+                      <div className="space-y-1">
+                        {pieData.map((d, i) => (
+                          <div key={d.name} className="flex items-center justify-between border-b border-border-subtle py-1 text-xs last:border-0">
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: PIE_COLORS[i] }} />
+                              <span className="truncate text-ink-secondary">{d.name}</span>
+                            </span>
+                            <span className="font-semibold text-ink-primary">{d.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Performance summary */}
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-1.5"><TrendingUp className="h-4 w-4 text-brand-600" /> Ringkasan Kinerja</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="text-ink-secondary">Tingkat penyelesaian</span>
+                      <span className="font-semibold text-ink-primary">{stats.pctSelesai}%</span>
+                    </div>
+                    <ProgressBar value={stats.pctSelesai} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <div className="rounded-lg bg-surface-sunken p-3">
+                      <p className="font-display text-lg font-semibold text-ink-primary">{avgProcessingDays ?? '—'}</p>
+                      <p className="text-[11px] text-ink-tertiary">Rata-rata hari proses</p>
+                    </div>
+                    <div className="rounded-lg bg-surface-sunken p-3">
+                      <p className="font-display text-lg font-semibold text-ink-primary">{stats.overdue.length}</p>
+                      <p className="text-[11px] text-ink-tertiary">Tugas terlambat</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Quick actions */}
+              <Card>
+                <CardHeader><CardTitle>Aksi Cepat</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-2 gap-2">
+                  {[
+                    { href: '/register', label: 'Register Dokumen', icon: FilePlus2 },
+                    { href: '/dokumen', label: 'Daftar Dokumen', icon: FileText },
+                    { href: '/rekapitulasi', label: 'Rekapitulasi', icon: BarChart3 },
+                    { href: '/ekspor', label: 'Ekspor Laporan', icon: Download },
+                  ].map(a => (
+                    <Link key={a.href} href={a.href}
+                      className="flex flex-col items-start gap-2 rounded-lg border border-border p-3 text-xs font-medium text-ink-secondary transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 hover:shadow-soft-sm dark:hover:bg-brand-950/30">
+                      <a.icon className="h-4 w-4" />
+                      {a.label}
+                    </Link>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Activity timeline */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-1.5"><Activity className="h-4 w-4 text-brand-600" /> Linimasa Aktivitas</CardTitle>
+                  <Link href="/log/aktivitas" className="text-xs font-medium text-brand-600 hover:text-brand-700">Semua →</Link>
+                </CardHeader>
+                <CardContent>
+                  {loading ? (
+                    <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
+                  ) : riwayat.length === 0 ? (
+                    <EmptyState title="Belum ada aktivitas" description="Aktivitas dokumen akan tercatat di sini." />
+                  ) : (
+                    <ol className="relative space-y-4 border-l border-border-subtle pl-4">
+                      {riwayat.map(r => (
+                        <li key={r.id} className="relative">
+                          <span
+                            className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-surface-raised"
+                            style={{ background: WARNA_RIWAYAT[r.warna] || '#9ca3af' }}
+                          />
+                          <p className="text-xs text-ink-primary">{r.keterangan}</p>
+                          {docsById[r.dokumen_id] && (
+                            <Link href={`/dokumen/${r.dokumen_id}`} className="text-[11px] font-medium text-brand-600 hover:text-brand-700">
+                              {docsById[r.dokumen_id].nama_dokumen}
+                            </Link>
+                          )}
+                          <p className="mt-0.5 text-[11px] text-ink-tertiary">
+                            {new Date(r.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       </Layout>
     </>
