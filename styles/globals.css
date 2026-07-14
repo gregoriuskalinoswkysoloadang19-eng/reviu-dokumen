@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   DRES Design System — design tokens (CSS variables)
+   Light and dark share the same variable names so every
+   component that consumes them repaints automatically.
+   ============================================================ */
+:root {
+  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  --surface-canvas: #f5f7fb;
+  --surface-base: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-overlay: rgba(255, 255, 255, 0.72);
+  --surface-sunken: #eef1f6;
+
+  --border-subtle: #edf0f5;
+  --border-default: #e3e7ee;
+  --border-strong: #c7ceda;
+
+  --ink-primary: #10172a;
+  --ink-secondary: #4b5468;
+  --ink-tertiary: #8a91a3;
+  --ink-inverse: #f7f9fc;
+
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --sidebar-bg: linear-gradient(180deg, #0d1836 0%, #16295f 60%, #0d1836 100%);
+}
+
+.dark {
+  --surface-canvas: #0b1220;
+  --surface-base: #10192e;
+  --surface-raised: #131f38;
+  --surface-overlay: rgba(19, 31, 56, 0.72);
+  --surface-sunken: #0b1220;
+
+  --border-subtle: #1b2740;
+  --border-default: #24304a;
+  --border-strong: #34405c;
+
+  --ink-primary: #eef1f8;
+  --ink-secondary: #a6afc4;
+  --ink-tertiary: #6d7690;
+  --ink-inverse: #10172a;
+
+  --glass-bg: rgba(19, 31, 56, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --sidebar-bg: linear-gradient(180deg, #070c18 0%, #0d1836 60%, #070c18 100%);
+}
+
+* { border-color: var(--border-default); }
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--surface-canvas);
+    color: var(--ink-primary);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); letter-spacing: -0.01em; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-tertiary); }
+
+  :focus-visible {
+    outline: 2px solid #2b60ea;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  /* ---- Legacy classes kept & re-themed so every existing page
+     picks up the new look with zero markup changes ---- */
+  .btn-primary {
+    @apply font-semibold py-2.5 px-4 rounded-lg text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    background: linear-gradient(135deg, #2b60ea, #17b271);
+    color: #fff;
+    box-shadow: 0 2px 8px -2px rgba(43, 96, 234, 0.45);
+  }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 14px -2px rgba(43, 96, 234, 0.5); }
+
+  .btn-secondary {
+    @apply font-medium py-2.5 px-4 rounded-lg text-sm transition-colors duration-200 border;
+    background: var(--surface-raised);
+    color: var(--ink-secondary);
+    border-color: var(--border-default);
+  }
+  .btn-secondary:hover { background: var(--surface-sunken); color: var(--ink-primary); }
+
+  .btn-danger {
+    @apply font-medium py-2.5 px-4 rounded-lg text-sm transition-colors duration-200 text-white;
+    background: #dc2626;
+  }
+  .btn-danger:hover { background: #b91c1c; }
+
+  .input {
+    @apply w-full px-3 py-2.5 rounded-lg text-sm border transition-colors duration-150;
+    background: var(--surface-raised);
+    border-color: var(--border-default);
+    color: var(--ink-primary);
+  }
+  .input:focus { outline: none; border-color: #2b60ea; box-shadow: 0 0 0 3px rgba(43, 96, 234, 0.15); }
+  .input::placeholder { color: var(--ink-tertiary); }
+
+  .label {
+    @apply block text-xs font-medium mb-1.5;
+    color: var(--ink-secondary);
+  }
+
+  .card {
+    @apply rounded-xl border transition-shadow duration-200;
+    background: var(--surface-raised);
+    border-color: var(--border-default);
+    box-shadow: 0 1px 3px 0 rgba(16, 24, 40, 0.06);
+  }
+
+  /* ---- New foundation utilities for Phase 1+ ---- */
+  .glass-panel {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-md;
+    background: var(--surface-sunken);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    transform: translateX(-100%);
+    animation: shimmer 1.6s infinite;
+  }
+  .dark .skeleton::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent); }
+
+  .badge-selesai { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium; background: var(--tw-color-success-subtle, #e9f9ef); color: #0f6e33; }
+  .badge-proses { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium; background: #eaf1ff; color: #1a3f9e; }
+  .badge-belum { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium; background: var(--surface-sunken); color: var(--ink-secondary); }
+  .badge-revisi { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium; background: #fef6e7; color: #8a4c04; }
+}
+
+/* Dark-mode compatibility shim: bridges legacy gray utility classes used on
+   existing pages onto the new tokens, so dark mode stays readable everywhere
+   until each page is migrated to ink and surface tokens directly. */
+.dark .text-gray-900, .dark .text-gray-800 { color: var(--ink-primary); }
+.dark .text-gray-700, .dark .text-gray-600 { color: var(--ink-secondary); }
+.dark .text-gray-500, .dark .text-gray-400 { color: var(--ink-tertiary); }
+.dark .bg-white { background-color: var(--surface-raised); }
+.dark .bg-gray-50 { background-color: var(--surface-canvas); }
+.dark .bg-gray-100 { background-color: var(--surface-sunken); }
+.dark .border-gray-100, .dark .border-gray-200, .dark .border-gray-300 { border-color: var(--border-default); }
+.dark .divide-gray-50 > * + * { border-color: var(--border-subtle); }
+
