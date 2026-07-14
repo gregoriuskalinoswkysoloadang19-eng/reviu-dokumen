@@ -268,33 +268,31 @@ export default function LoginPage() {
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/15 to-transparent" />
 
                 <div className="relative px-7 py-9 sm:px-9 sm:py-10">
-                  {/* Logo with glow */}
+                  {/* Logo with soft glow — no container box, floats directly on the glass */}
                   <div className="mb-6 flex justify-center">
-                    <div className="relative">
-                      <div className="absolute inset-0 scale-125 rounded-full bg-gradient-to-br from-brand-400 to-accent-400 opacity-50 blur-xl" />
-                      <motion.div
-                        initial={{ scale: 0.7, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ delay: 0.25, type: 'spring', stiffness: 200, damping: 16 }}
-                        className="relative flex h-20 w-20 items-center justify-center rounded-full bg-white p-2 shadow-soft-lg ring-1 ring-white/60"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src="/logo-sumba-barat.png"
-                          alt="Lambang Kabupaten Sumba Barat"
-                          className="h-full w-full object-contain"
-                          onError={(e) => {
-                            const t = e.currentTarget
-                            t.style.display = 'none'
-                            const parent = t.parentElement
-                            if (parent) {
-                              parent.innerHTML =
-                                '<div style="width:64px;height:64px;background:linear-gradient(135deg,#2b60ea,#17b271);border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:22px;">D</div>'
-                            }
-                          }}
-                        />
-                      </motion.div>
-                    </div>
+                    <motion.div
+                      initial={{ scale: 0.7, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.25, type: 'spring', stiffness: 200, damping: 16 }}
+                      className="relative flex h-24 w-24 items-center justify-center"
+                    >
+                      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-brand-400/60 to-accent-400/60 opacity-70 blur-2xl" />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src="/logo-sumba-barat.png"
+                        alt="Lambang Kabupaten Sumba Barat"
+                        className="relative h-full w-full object-contain drop-shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+                        onError={(e) => {
+                          const t = e.currentTarget
+                          t.style.display = 'none'
+                          const parent = t.parentElement
+                          if (parent) {
+                            parent.innerHTML +=
+                              '<div style="position:relative;width:72px;height:72px;background:linear-gradient(135deg,#2b60ea,#17b271);border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:22px;">D</div>'
+                          }
+                        }}
+                      />
+                    </motion.div>
                   </div>
 
                   <motion.div
