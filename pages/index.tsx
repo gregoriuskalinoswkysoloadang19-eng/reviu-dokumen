@@ -11,9 +11,10 @@ import {
   CalendarClock, UserCheck, Activity, Award, ClipboardList,
 } from 'lucide-react'
 import Layout from '@/components/Layout'
+import SumbaMotif from '@/components/SumbaMotif'
 import { supabase } from '@/lib/supabase'
 import { WARNA_RIWAYAT } from '@/lib/constants'
-import { Card, CardHeader, CardTitle, CardContent, Skeleton, EmptyState, ProgressBar } from '@/components/ui'
+import { Card, CardHeader, CardTitle, CardContent, Skeleton, EmptyState, ProgressBar, ActivityHeatmap } from '@/components/ui'
 import StatCard from '@/components/ui/StatCard'
 import { DocumentRow, type DocLite } from '@/components/DocumentCard'
 
@@ -49,13 +50,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [now] = useState(() => new Date())
 
+  const [activityDates, setActivityDates] = useState<string[]>([])
+
   useEffect(() => {
     async function load() {
-      const [{ data: userRes }, { data: docs }, { data: hist }] = await Promise.all([
+      const [{ data: userRes }, { data: docs }, { data: hist }, { data: heat }] = await Promise.all([
         supabase.auth.getUser(),
         supabase.from('dokumen').select('*').order('created_at', { ascending: false }),
         supabase.from('riwayat').select('*').order('created_at', { ascending: false }).limit(8),
+        supabase.from('riwayat').select('created_at').order('created_at', { ascending: false }).limit(500),
       ])
+      setActivityDates((heat || []).map((r: { created_at: string }) => r.created_at))
       if (userRes?.user) {
         const { data: profile } = await supabase.from('users').select('nama,role').eq('id', userRes.user.id).single()
         if (profile) { setUserName(profile.nama); setUserRole(profile.role) }
@@ -175,8 +180,9 @@ export default function DashboardPage() {
       <Layout>
         <div className="space-y-6 pb-4">
           {/* Greeting header */}
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
+          <div className="relative overflow-hidden rounded-2xl border border-border-subtle bg-surface-raised px-5 py-5 flex flex-wrap items-start justify-between gap-4">
+            <SumbaMotif className="text-brand-500 z-0" opacity={0.05} />
+            <div className="relative z-10">
               {loading ? (
                 <Skeleton className="h-7 w-64 rounded-md" />
               ) : (
@@ -190,7 +196,7 @@ export default function DashboardPage() {
                 {' · '}Berikut ringkasan beban kerja Anda hari ini.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="relative z-10 flex flex-wrap gap-2">
               <Link href="/register" className="inline-flex h-10 items-center gap-2 rounded-lg bg-gradient-to-br from-brand-500 to-accent-500 px-4 text-sm font-medium text-white shadow-soft-sm transition-all duration-200 hover:brightness-105 hover:shadow-soft-md">
                 <FilePlus2 className="h-4 w-4" /> Register Dokumen
               </Link>
@@ -339,6 +345,18 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Activity heatmap */}
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-1.5"><Activity className="h-4 w-4 text-brand-600" /> Heatmap Aktivitas</CardTitle></CardHeader>
+                <CardContent>
+                  {loading ? <Skeleton className="h-24 w-full rounded-lg" /> : activityDates.length === 0 ? (
+                    <EmptyState title="Belum ada aktivitas" description="Heatmap akan terisi seiring aktivitas dokumen berjalan." />
+                  ) : (
+                    <ActivityHeatmap timestamps={activityDates} />
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Team productivity */}
               <Card>

@@ -13,6 +13,10 @@ import Badge from '@/components/ui/Badge'
 import Breadcrumb from '@/components/ui/Breadcrumb'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/DropdownMenu'
 import Footer from '@/components/Footer'
+import CommandPalette from '@/components/CommandPalette'
+import QuickActionFAB from '@/components/QuickActionFAB'
+import AIAssistantPanel from '@/components/AIAssistantPanel'
+import SumbaMotif from '@/components/SumbaMotif'
 
 // Single navigation group today — structured so Review, Evaluation, Repository
 // and other future modules can each become their own group without touching
@@ -48,6 +52,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifs, setNotifs] = useState<Notif[]>([])
   const [unread, setUnread] = useState(0)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   useEffect(() => {
     const stored = window.localStorage.getItem('dres-sidebar-collapsed')
@@ -63,6 +79,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }
     })
     fetchNotifs()
+
+    const channel = supabase
+      .channel('dres-notifikasi-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifikasi' }, () => fetchNotifs())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   async function fetchNotifs() {
@@ -109,10 +131,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => (
     <aside
-      className={cn('flex flex-col h-full text-white transition-all duration-250', collapsed ? 'w-[76px]' : 'w-64')}
+      className={cn('relative flex flex-col h-full text-white transition-all duration-250 overflow-hidden', collapsed ? 'w-[76px]' : 'w-64')}
       style={{ background: 'var(--sidebar-bg)' }}
     >
-      <div className={cn('flex items-center gap-2.5 px-4 h-16 border-b border-white/10 flex-shrink-0', collapsed && 'justify-center px-0')}>
+      <SumbaMotif className="text-white z-0" opacity={0.05} />
+      <div className={cn('relative z-10 flex items-center gap-2.5 px-4 h-16 border-b border-white/10 flex-shrink-0', collapsed && 'justify-center px-0')}>
         <div className="w-9 h-9 flex items-center justify-center flex-shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-sumba-barat.png" alt="Logo Kabupaten Sumba Barat" className="w-full h-full object-contain" />
@@ -124,7 +147,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
+      <nav className="relative z-10 flex-1 px-3 py-4 space-y-4 overflow-y-auto">
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
             {!collapsed && <div className="px-2 mb-1.5 text-[10px] font-semibold text-white/40 uppercase tracking-wider">{group.label}</div>}
@@ -156,7 +179,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         ))}
       </nav>
 
-      <div className="px-3 py-3 border-t border-white/10 flex-shrink-0">
+      <div className="relative z-10 px-3 py-3 border-t border-white/10 flex-shrink-0">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className={cn('w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/10 transition-colors', collapsed && 'justify-center px-0')}>
@@ -179,7 +202,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <button
         onClick={toggleCollapsed}
-        className="hidden md:flex items-center justify-center h-9 border-t border-white/10 text-white/50 hover:text-white hover:bg-white/5 transition-colors flex-shrink-0"
+        className="relative z-10 hidden md:flex items-center justify-center h-9 border-t border-white/10 text-white/50 hover:text-white hover:bg-white/5 transition-colors flex-shrink-0"
         aria-label={collapsed ? 'Perluas sidebar' : 'Ciutkan sidebar'}
       >
         {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
@@ -216,18 +239,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="flex-1" />
 
-          {/* Global search — visual placeholder, wired up in a later phase */}
-          <div className="relative hidden sm:block" title="Pencarian global — segera hadir">
+          {/* Global search / Command Palette trigger */}
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="relative hidden sm:flex items-center h-9 w-52 lg:w-72 rounded-lg text-sm bg-surface-sunken border border-transparent hover:border-border text-left transition-colors"
+            title="Buka Command Palette"
+          >
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-tertiary" />
-            <input
-              disabled
-              placeholder="Cari dokumen, pengguna..."
-              className="h-9 w-52 lg:w-72 pl-9 pr-14 rounded-lg text-sm bg-surface-sunken border border-transparent text-ink-tertiary placeholder:text-ink-tertiary cursor-not-allowed"
-            />
+            <span className="pl-9 pr-14 text-ink-tertiary truncate">Cari dokumen, menu...</span>
             <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-ink-tertiary bg-surface-raised border border-border rounded px-1.5 py-0.5">
               ⌘K
             </kbd>
-          </div>
+          </button>
 
           <ThemeSwitch />
 
@@ -284,6 +307,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <Footer />
         </main>
       </div>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <AIAssistantPanel />
+      <QuickActionFAB />
     </div>
   )
 }
