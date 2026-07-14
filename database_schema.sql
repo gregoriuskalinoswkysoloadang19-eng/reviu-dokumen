@@ -1,173 +1,100 @@
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/router'
-import Head from 'next/head'
-import Link from 'next/link'
-import Layout from '@/components/Layout'
-import { supabase } from '@/lib/supabase'
+-- ============================================================
+-- SCHEMA DATABASE — Sistem Monitoring Reviu Dokumen
+-- Inspektorat Kabupaten Sumba Barat
+-- Jalankan script ini di Supabase > SQL Editor
+-- ============================================================
 
-const STATUS_PROGRES: Record<string, number> = {
-  'Belum Direviu': 0,
-  'Perlu Revisi': 25,
-  'Dalam Proses': 50,
-  'Penyusunan Laporan Hasil Reviu': 75,
-  'Selesai': 100,
-}
-const STATUS_LIST = ['Belum Direviu','Dalam Proses','Perlu Revisi','Penyusunan Laporan Hasil Reviu','Selesai']
-const STATUS_COLOR: Record<string,string> = {
-  'Belum Direviu':'#9ca3af',
-  'Perlu Revisi':'#d97706',
-  'Dalam Proses':'#2563eb',
-  'Penyusunan Laporan Hasil Reviu':'#7c3aed',
-  'Selesai':'#16a34a',
-}
+-- 1. Tabel users (profil tambahan selain auth.users)
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  nama TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'operator', 'pimpinan')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-export default function EditDokumenPage() {
-  const router = useRouter()
-  const { id } = router.query
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState({
-    nomor_laporan:'', nama_dokumen:'', kategori:'Perencanaan', pic:'',
-    tanggal_diajukan:'', target_selesai:'', tanggal_selesai:'',
-    status:'Belum Direviu', catatan:''
-  })
+-- 2. Tabel dokumen
+CREATE TABLE IF NOT EXISTS public.dokumen (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nomor_laporan TEXT NOT NULL,
+  nama_dokumen TEXT NOT NULL,
+  kategori TEXT NOT NULL CHECK (kategori IN ('Perencanaan', 'Keuangan', 'Kinerja')),
+  pic TEXT,
+  tanggal_diajukan DATE NOT NULL,
+  target_selesai DATE,
+  tanggal_selesai DATE,
+  status TEXT NOT NULL DEFAULT 'Belum Direviu'
+    CHECK (status IN ('Belum Direviu', 'Dalam Proses', 'Perlu Revisi', 'Selesai')),
+  progres INTEGER NOT NULL DEFAULT 0 CHECK (progres >= 0 AND progres <= 100),
+  catatan TEXT,
+  file_url TEXT,
+  file_name TEXT,
+  file_size TEXT,
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-  useEffect(()=>{
-    if(!id) return
-    supabase.from('dokumen').select('*').eq('id',id).single().then(({data})=>{
-      if(data) setForm({
-        nomor_laporan: data.nomor_laporan||'',
-        nama_dokumen: data.nama_dokumen||'',
-        kategori: data.kategori||'Perencanaan',
-        pic: data.pic||'',
-        tanggal_diajukan: data.tanggal_diajukan||'',
-        target_selesai: data.target_selesai||'',
-        tanggal_selesai: data.tanggal_selesai||'',
-        status: data.status||'Belum Direviu',
-        catatan: data.catatan||'',
-      })
-      setLoading(false)
-    })
-  },[id])
+-- 3. Tabel riwayat aktivitas
+CREATE TABLE IF NOT EXISTS public.riwayat (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  dokumen_id UUID NOT NULL REFERENCES public.dokumen(id) ON DELETE CASCADE,
+  keterangan TEXT NOT NULL,
+  warna TEXT NOT NULL DEFAULT 'x' CHECK (warna IN ('g', 'b', 'a', 'x')),
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-  function set(k:string,v:string){setForm(f=>({...f,[k]:v}))}
+-- ============================================================
+-- ROW LEVEL SECURITY
+-- ============================================================
 
-  function handleStatusChange(newStatus: string) {
-    setForm(f=>({
-      ...f,
-      status: newStatus,
-      tanggal_selesai: newStatus === 'Selesai' && !f.tanggal_selesai
-        ? new Date().toISOString().slice(0,10)
-        : newStatus !== 'Selesai' ? '' : f.tanggal_selesai
-    }))
-  }
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.dokumen ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.riwayat ENABLE ROW LEVEL SECURITY;
 
-  const progresOtomatis = STATUS_PROGRES[form.status] ?? 0
+-- Users: bisa baca sendiri
+CREATE POLICY "users_read_own" ON public.users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "users_insert_own" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
 
-  async function handleSave(e:React.FormEvent){
-    e.preventDefault()
-    if(!form.nama_dokumen||!form.nomor_laporan){setError('Nama dan nomor laporan wajib diisi');return}
-    setSaving(true); setError('')
-    const w = form.status==='Selesai'?'g':form.status==='Penyusunan Laporan Hasil Reviu'?'g':form.status==='Perlu Revisi'?'a':form.status==='Dalam Proses'?'b':'x'
-    const {error:err}=await supabase.from('dokumen').update({
-      ...form,
-      progres: progresOtomatis,
-      target_selesai: form.target_selesai||null,
-      tanggal_selesai: form.tanggal_selesai||null,
-      updated_at: new Date().toISOString()
-    }).eq('id',id)
-    if(err){setError('Gagal menyimpan: '+err.message);setSaving(false);return}
-    await supabase.from('riwayat').insert({
-      dokumen_id:id,
-      keterangan:`Status diperbarui: ${form.status} (${progresOtomatis}%)`,
-      warna: w
-    })
-    router.push('/dokumen')
-  }
+-- Dokumen: semua user login bisa baca & tulis
+CREATE POLICY "dokumen_select" ON public.dokumen FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "dokumen_insert" ON public.dokumen FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "dokumen_update" ON public.dokumen FOR UPDATE USING (auth.role() = 'authenticated');
 
-  if(loading) return <Layout><div className="flex justify-center items-center h-64"><div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div></Layout>
+-- Riwayat: semua user login bisa baca & tulis
+CREATE POLICY "riwayat_select" ON public.riwayat FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "riwayat_insert" ON public.riwayat FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
-  return (
-    <>
-      <Head><title>Edit Dokumen — Monitoring Reviu</title></Head>
-      <Layout>
-        <div className="max-w-2xl space-y-5">
-          <Link href="/dokumen" className="text-sm text-gray-500 hover:text-gray-700">← Kembali ke Daftar</Link>
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">Edit Dokumen</h1>
-            <p className="text-sm text-gray-500">Perbarui data dokumen yang sudah diregistrasi</p>
-          </div>
-          <form onSubmit={handleSave} className="card p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="label">Nama Dokumen <span className="text-red-500">*</span></label>
-                <input className="input" value={form.nama_dokumen} onChange={e=>set('nama_dokumen',e.target.value)} required/>
-              </div>
-              <div>
-                <label className="label">Nomor Laporan <span className="text-red-500">*</span></label>
-                <input className="input" value={form.nomor_laporan} onChange={e=>set('nomor_laporan',e.target.value)} required/>
-              </div>
-              <div>
-                <label className="label">Kategori</label>
-                <select className="input" value={form.kategori} onChange={e=>set('kategori',e.target.value)}>
-                  <option>Perencanaan</option><option>Keuangan</option><option>Kinerja</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Tanggal Diajukan</label>
-                <input type="date" className="input" value={form.tanggal_diajukan} onChange={e=>set('tanggal_diajukan',e.target.value)}/>
-              </div>
-              <div>
-                <label className="label">Target Selesai</label>
-                <input type="date" className="input" value={form.target_selesai} onChange={e=>set('target_selesai',e.target.value)}/>
-              </div>
+-- ============================================================
+-- STORAGE BUCKET untuk file dokumen
+-- ============================================================
 
-              {/* Status + Progres Otomatis */}
-              <div>
-                <label className="label">Status Reviu</label>
-                <select className="input" value={form.status} onChange={e=>handleStatusChange(e.target.value)}>
-                  {STATUS_LIST.map(s=><option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Progres <span className="text-xs text-gray-400 font-normal">(otomatis)</span></label>
-                <div className="flex items-center gap-3 mt-1">
-                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-500"
-                      style={{width:`${progresOtomatis}%`, background:STATUS_COLOR[form.status]}}></div>
-                  </div>
-                  <span className="text-sm font-semibold text-gray-700 w-10">{progresOtomatis}%</span>
-                </div>
-                <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
-                  Belum Direviu = 0% · Perlu Revisi = 25% · Dalam Proses = 50% · Penyusunan LHR = 75% · Selesai = 100%
-                </p>
-              </div>
+INSERT INTO storage.buckets (id, name, public) VALUES ('dokumen-reviu', 'dokumen-reviu', false)
+ON CONFLICT DO NOTHING;
 
-              <div>
-                <label className="label">Tanggal Selesai Reviu</label>
-                <input type="date" className="input" value={form.tanggal_selesai} onChange={e=>set('tanggal_selesai',e.target.value)}/>
-                {form.status==='Selesai' && !form.tanggal_selesai && (
-                  <p className="text-xs text-amber-600 mt-1">⚠ Isi tanggal selesai untuk status Selesai</p>
-                )}
-              </div>
-              <div>
-                <label className="label">PIC / Unit Pemilik</label>
-                <input className="input" value={form.pic} onChange={e=>set('pic',e.target.value)}/>
-              </div>
-              <div className="md:col-span-2">
-                <label className="label">Catatan</label>
-                <textarea className="input min-h-20 resize-y" value={form.catatan} onChange={e=>set('catatan',e.target.value)}/>
-              </div>
-            </div>
-            {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
-            <div className="flex gap-3 justify-end pt-2 border-t border-gray-100">
-              <Link href="/dokumen" className="btn-secondary">Batal</Link>
-              <button type="submit" disabled={saving} className="btn-primary">{saving?'Menyimpan...':'Simpan Perubahan'}</button>
-            </div>
-          </form>
-        </div>
-      </Layout>
-    </>
-  )
-}
+CREATE POLICY "storage_select" ON storage.objects FOR SELECT USING (bucket_id = 'dokumen-reviu' AND auth.role() = 'authenticated');
+CREATE POLICY "storage_insert" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'dokumen-reviu' AND auth.role() = 'authenticated');
+CREATE POLICY "storage_delete" ON storage.objects FOR DELETE USING (bucket_id = 'dokumen-reviu' AND auth.role() = 'authenticated');
+
+-- ============================================================
+-- DATA AWAL: 15 DOKUMEN SAMPLE
+-- (Hapus blok ini jika tidak ingin data sample)
+-- ============================================================
+
+INSERT INTO public.dokumen (nomor_laporan, nama_dokumen, kategori, pic, tanggal_diajukan, target_selesai, tanggal_selesai, status, progres, catatan) VALUES
+('001/REV/2025','Rencana Kerja Anggaran (RKA)','Perencanaan','Biro Perencanaan','2025-01-10','2025-01-20','2025-01-17','Selesai',100,'Dokumen sesuai format. Konsistensi kode program perlu dijaga.'),
+('002/REV/2025','Dokumen Pelaksanaan Anggaran (DIPA)','Keuangan','Biro Keuangan','2025-01-15','2025-01-25','2025-01-22','Selesai',100,'DIPA terverifikasi. Kesesuaian dengan RKA terkonfirmasi.'),
+('003/REV/2025','Laporan Keuangan Semester I','Keuangan','Biro Keuangan','2025-02-01','2025-02-15','2025-02-10','Selesai',100,'Laporan akurat. Beberapa kode akun perlu penyesuaian.'),
+('004/REV/2025','Laporan Keuangan Semester II','Keuangan','Biro Keuangan','2025-07-05','2025-07-20',NULL,'Dalam Proses',55,'Verifikasi saldo akhir. Menunggu rekonsiliasi bagian aset.'),
+('005/REV/2025','LKj Triwulan I','Kinerja','Biro Organisasi','2025-04-02','2025-04-12','2025-04-09','Selesai',100,'LKj lengkap. Capaian IKU terdokumentasi.'),
+('006/REV/2025','LKj Triwulan II','Kinerja','Biro Organisasi','2025-07-01','2025-07-15',NULL,'Perlu Revisi',40,'Bukti dukung IKU belum lengkap. Dikembalikan untuk revisi.'),
+('007/REV/2025','LKj Tahunan','Kinerja','Biro Organisasi','2025-02-15','2025-02-28','2025-02-25','Selesai',100,'Disetujui. Rekomendasi: perbaikan metodologi IKU.'),
+('008/REV/2025','Rencana Strategis (Renstra)','Perencanaan','Biro Perencanaan','2025-01-05','2025-01-18','2025-01-15','Selesai',100,'Selaras dengan RPJMN. Tidak ada catatan signifikan.'),
+('009/REV/2025','Rencana Kerja (Renja)','Perencanaan','Biro Perencanaan','2025-02-10','2025-02-22','2025-02-20','Selesai',100,'Konsisten dengan Renstra. Alokasi sesuai prioritas.'),
+('010/REV/2025','Laporan Realisasi Anggaran','Keuangan','Biro Keuangan','2025-07-12','2025-07-26',NULL,'Dalam Proses',30,'Pengecekan data pendukung. Data Juni masih menunggu.'),
+('011/REV/2025','Laporan Aset Tetap','Keuangan','Biro Umum','2025-07-08','2025-07-22',NULL,'Belum Direviu',0,NULL),
+('012/REV/2025','Laporan Barang Milik Negara (BMN)','Keuangan','Biro Umum','2025-07-09','2025-07-23',NULL,'Belum Direviu',0,NULL),
+('013/REV/2025','Evaluasi Program Prioritas','Kinerja','Biro Organisasi','2025-07-10','2025-07-24',NULL,'Belum Direviu',0,NULL),
+('014/REV/2025','Laporan Monitoring dan Evaluasi','Kinerja','Biro Organisasi','2025-07-15','2025-07-29',NULL,'Dalam Proses',20,'Pengumpulan data realisasi dari unit kerja.'),
+('015/REV/2025','Laporan Keuangan Tahunan (Audited)','Keuangan','Biro Keuangan','2025-07-18','2025-08-01',NULL,'Belum Direviu',0,NULL);

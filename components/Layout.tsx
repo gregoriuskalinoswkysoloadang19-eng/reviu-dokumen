@@ -113,13 +113,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       style={{ background: 'var(--sidebar-bg)' }}
     >
       <div className={cn('flex items-center gap-2.5 px-4 h-16 border-b border-white/10 flex-shrink-0', collapsed && 'justify-center px-0')}>
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-accent-400 flex items-center justify-center font-display font-bold text-sm flex-shrink-0">
-          D
+        <div className="w-9 h-9 flex items-center justify-center flex-shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-sumba-barat.png" alt="Logo Kabupaten Sumba Barat" className="w-full h-full object-contain" />
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <div className="font-display font-semibold text-sm leading-tight">DRES</div>
-            <div className="text-[10px] text-white/50 leading-tight truncate">Inspectorate of West Sumba Regency</div>
+            <div className="font-display font-semibold text-[13px] leading-snug">Document Review &amp; Evaluation System</div>
           </div>
         )}
       </div>
