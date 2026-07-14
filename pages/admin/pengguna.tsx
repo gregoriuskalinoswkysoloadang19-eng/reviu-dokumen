@@ -131,7 +131,7 @@ export default function PenggunaPage() {
 
   return (
     <>
-      <Head><title>Manajemen Pengguna — Monitoring Reviu</title></Head>
+      <Head><title>Manajemen Pengguna — DRES | Inspectorate of West Sumba Regency</title></Head>
       <Layout>
         <div className="space-y-6 max-w-4xl">
           <div className="flex items-center justify-between flex-wrap gap-3">

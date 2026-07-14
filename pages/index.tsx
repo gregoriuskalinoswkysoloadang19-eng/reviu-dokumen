@@ -93,13 +93,13 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Head><title>Dashboard — Monitoring Reviu Dokumen</title></Head>
+      <Head><title>Dashboard — DRES | Inspectorate of West Sumba Regency</title></Head>
       <Layout>
         <div className="space-y-5">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h1 className="text-lg font-semibold text-gray-900">Dashboard</h1>
-              <p className="text-sm text-gray-500">Inspektorat Kabupaten Sumba Barat · Monitoring Reviu Dokumen</p>
+              <p className="text-sm text-gray-500">DRES · Document Review & Evaluation System — Inspectorate of West Sumba Regency</p>
             </div>
             <Link href="/register" className="btn-primary flex items-center gap-2 text-sm">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>

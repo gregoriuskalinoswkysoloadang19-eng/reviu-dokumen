@@ -55,7 +55,7 @@ export default function RekapPage() {
 
   return (
     <>
-      <Head><title>Rekapitulasi — Monitoring Reviu</title></Head>
+      <Head><title>Rekapitulasi — DRES | Inspectorate of West Sumba Regency</title></Head>
       <Layout>
         <div className="space-y-6">
           <div className="flex items-center justify-between flex-wrap gap-3">

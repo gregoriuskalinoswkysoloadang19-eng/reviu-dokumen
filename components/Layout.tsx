@@ -1,30 +1,57 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
+import {
+  LayoutDashboard, FileText, FilePlus2, BarChart3, History, Download, Users2,
+  Bell, Menu, PanelLeftClose, PanelLeftOpen, LogOut, Search,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { cn } from '@/lib/utils'
+import ThemeSwitch from '@/components/ui/ThemeSwitch'
+import Avatar from '@/components/ui/Avatar'
+import Badge from '@/components/ui/Badge'
+import Breadcrumb from '@/components/ui/Breadcrumb'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/DropdownMenu'
+import Footer from '@/components/Footer'
 
-const NAV = [
-  { href:'/', label:'Dashboard', icon:'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-  { href:'/dokumen', label:'Daftar Dokumen', icon:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  { href:'/register', label:'Register Dokumen', icon:'M12 4v16m8-8H4' },
-  { href:'/rekapitulasi', label:'Rekapitulasi', icon:'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
-  { href:'/log/aktivitas', label:'Log Aktivitas', icon:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
-  { href:'/ekspor', label:'Ekspor Laporan', icon:'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' },
-  { href:'/admin/pengguna', label:'Kelola Pengguna', icon:'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', adminOnly:true },
+// Single navigation group today — structured so Review, Evaluation, Repository
+// and other future modules can each become their own group without touching
+// the render logic below.
+const NAV_GROUPS = [
+  {
+    label: 'Menu Utama',
+    items: [
+      { href: '/', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
+      { href: '/dokumen', label: 'Daftar Dokumen', icon: FileText, adminOnly: false },
+      { href: '/register', label: 'Register Dokumen', icon: FilePlus2, adminOnly: false },
+      { href: '/rekapitulasi', label: 'Rekapitulasi', icon: BarChart3, adminOnly: false },
+      { href: '/log/aktivitas', label: 'Log Aktivitas', icon: History, adminOnly: false },
+      { href: '/ekspor', label: 'Ekspor Laporan', icon: Download, adminOnly: false },
+      { href: '/admin/pengguna', label: 'Kelola Pengguna', icon: Users2, adminOnly: true },
+    ],
+  },
 ]
 
-type Notif = { id:string; judul:string; pesan:string; dibaca:boolean; created_at:string; dokumen_id:string|null }
+const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items)
+
+type Notif = { id: string; judul: string; pesan: string; dibaca: boolean; created_at: string; dokumen_id: string | null }
+
+const ROLE_LABEL: Record<string, string> = { admin: 'Administrator', operator: 'Operator', pimpinan: 'Pimpinan' }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [userName, setUserName] = useState('')
   const [userRole, setUserRole] = useState('')
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifs, setNotifs] = useState<Notif[]>([])
   const [unread, setUnread] = useState(0)
 
   useEffect(() => {
+    const stored = window.localStorage.getItem('dres-sidebar-collapsed')
+    if (stored) setCollapsed(stored === '1')
+
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         supabase.from('users').select('nama,role').eq('id', user.id).single()
@@ -57,100 +84,190 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     router.push('/login')
   }
 
-  const ROLE_LABEL: Record<string, string> = { admin: 'Administrator', operator: 'Operator', pimpinan: 'Pimpinan' }
-  const ROLE_COLOR: Record<string, string> = { admin: 'bg-purple-500', operator: 'bg-blue-500', pimpinan: 'bg-amber-500' }
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      window.localStorage.setItem('dres-sidebar-collapsed', v ? '0' : '1')
+      return !v
+    })
+  }
 
-  const Sidebar = () => (
-    <aside className="w-60 bg-blue-900 text-white flex flex-col h-full">
-      <div className="px-5 py-4 border-b border-blue-800">
-        <div className="font-semibold text-sm">Monitoring Reviu Dokumen</div>
-        <div className="text-blue-300 text-xs mt-0.5">Inspektorat Sumba Barat</div>
-      </div>
-      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-        {NAV.filter(item => !item.adminOnly || userRole === 'admin').map(item => {
-          const active = router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
-          return (
-            <Link key={item.href} href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${active ? 'bg-blue-700 text-white' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
-              onClick={() => setMobileOpen(false)}>
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-              </svg>
-              <span className="flex-1">{item.label}</span>
-              {item.adminOnly && <span className="text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded">Admin</span>}
-            </Link>
-          )
-        })}
-      </nav>
-      <div className="px-4 py-3 border-t border-blue-800">
-        <div className="flex items-center gap-2 mb-2">
-          <div className={`w-7 h-7 rounded-full ${ROLE_COLOR[userRole] || 'bg-blue-500'} flex items-center justify-center text-xs font-bold flex-shrink-0`}>
-            {(userName.charAt(0) || 'U').toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <div className="text-xs text-white font-medium truncate">{userName}</div>
-            <div className="text-xs text-blue-300">{ROLE_LABEL[userRole] || userRole}</div>
-          </div>
+  const crumbs = useMemo(() => {
+    const current = ALL_ITEMS.find(
+      (item) => router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
+    )
+    if (!current || current.href === '/') return [{ label: 'Dashboard', href: '/' }]
+    return [{ label: 'DRES', href: '/' }, { label: current.label, href: current.href }]
+  }, [router.pathname])
+
+  const pageTitle = useMemo(() => {
+    const current = ALL_ITEMS.find(
+      (item) => router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
+    )
+    return current?.label || 'DRES'
+  }, [router.pathname])
+
+  const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => (
+    <aside
+      className={cn('flex flex-col h-full text-white transition-all duration-250', collapsed ? 'w-[76px]' : 'w-64')}
+      style={{ background: 'var(--sidebar-bg)' }}
+    >
+      <div className={cn('flex items-center gap-2.5 px-4 h-16 border-b border-white/10 flex-shrink-0', collapsed && 'justify-center px-0')}>
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-accent-400 flex items-center justify-center font-display font-bold text-sm flex-shrink-0">
+          D
         </div>
-        <button onClick={handleLogout} className="w-full text-left text-xs text-blue-300 hover:text-white flex items-center gap-1.5 mt-1">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          Keluar
-        </button>
+        {!collapsed && (
+          <div className="min-w-0">
+            <div className="font-display font-semibold text-sm leading-tight">DRES</div>
+            <div className="text-[10px] text-white/50 leading-tight truncate">Inspectorate of West Sumba Regency</div>
+          </div>
+        )}
       </div>
+
+      <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label}>
+            {!collapsed && <div className="px-2 mb-1.5 text-[10px] font-semibold text-white/40 uppercase tracking-wider">{group.label}</div>}
+            <div className="space-y-0.5">
+              {group.items.filter((item) => !item.adminOnly || userRole === 'admin').map((item) => {
+                const active = router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    title={collapsed ? item.label : undefined}
+                    className={cn(
+                      'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
+                      collapsed && 'justify-center px-0',
+                      active ? 'bg-white/15 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
+                    )}
+                    onClick={onNavigate}
+                  >
+                    {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-accent-400" />}
+                    <Icon className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={2} />
+                    {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+                    {!collapsed && item.adminOnly && <Badge tone="brand" className="!bg-white/15 !text-white">Admin</Badge>}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      <div className="px-3 py-3 border-t border-white/10 flex-shrink-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className={cn('w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/10 transition-colors', collapsed && 'justify-center px-0')}>
+              <Avatar name={userName || 'U'} size="sm" />
+              {!collapsed && (
+                <div className="min-w-0 text-left">
+                  <div className="text-xs font-medium truncate">{userName}</div>
+                  <div className="text-[10px] text-white/50">{ROLE_LABEL[userRole] || userRole}</div>
+                </div>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start">
+            <DropdownMenuItem onSelect={handleLogout} className="text-danger data-[highlighted]:text-danger">
+              <LogOut className="w-4 h-4" /> Keluar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <button
+        onClick={toggleCollapsed}
+        className="hidden md:flex items-center justify-center h-9 border-t border-white/10 text-white/50 hover:text-white hover:bg-white/5 transition-colors flex-shrink-0"
+        aria-label={collapsed ? 'Perluas sidebar' : 'Ciutkan sidebar'}
+      >
+        {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+      </button>
     </aside>
   )
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      <div className="hidden md:flex flex-col"><Sidebar /></div>
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--surface-canvas)' }}>
+      <div className="hidden md:flex flex-col flex-shrink-0 shadow-glass z-20">
+        <Sidebar />
+      </div>
+
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
-          <div className="fixed left-0 top-0 h-full z-50"><Sidebar /></div>
+          <div className="fixed inset-0 bg-black/50 animate-fade-in" onClick={() => setMobileOpen(false)} />
+          <div className="fixed left-0 top-0 h-full z-50 animate-slide-up">
+            <Sidebar onNavigate={() => setMobileOpen(false)} />
+          </div>
         </div>
       )}
+
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Topbar */}
-        <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 flex-shrink-0">
-          <button onClick={() => setMobileOpen(true)} className="md:hidden p-1 rounded text-gray-600">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+        {/* Sticky top navigation */}
+        <header className="flex items-center gap-3 px-4 md:px-6 h-16 glass-panel border-b border-border-subtle flex-shrink-0 z-10">
+          <button onClick={() => setMobileOpen(true)} className="md:hidden p-2 -ml-2 rounded-lg text-ink-secondary hover:bg-surface-sunken">
+            <Menu className="w-5 h-5" />
           </button>
-          <span className="text-sm font-medium text-gray-700 md:hidden">Monitoring Reviu</span>
+
+          <div className="hidden md:block min-w-0">
+            <div className="text-sm font-display font-semibold text-ink-primary truncate">{pageTitle}</div>
+            <Breadcrumb items={crumbs} />
+          </div>
+
           <div className="flex-1" />
-          {/* Notifikasi bell */}
+
+          {/* Global search — visual placeholder, wired up in a later phase */}
+          <div className="relative hidden sm:block" title="Pencarian global — segera hadir">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-tertiary" />
+            <input
+              disabled
+              placeholder="Cari dokumen, pengguna..."
+              className="h-9 w-52 lg:w-72 pl-9 pr-14 rounded-lg text-sm bg-surface-sunken border border-transparent text-ink-tertiary placeholder:text-ink-tertiary cursor-not-allowed"
+            />
+            <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-ink-tertiary bg-surface-raised border border-border rounded px-1.5 py-0.5">
+              ⌘K
+            </kbd>
+          </div>
+
+          <ThemeSwitch />
+
+          {/* Notifications */}
           <div className="relative">
-            <button onClick={() => { setNotifOpen(v => !v); if (!notifOpen) fetchNotifs() }}
-              className="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
+            <button
+              onClick={() => { setNotifOpen((v) => !v); if (!notifOpen) fetchNotifs() }}
+              className="relative p-2 rounded-lg text-ink-secondary hover:bg-surface-sunken transition-colors"
+              aria-label="Notifikasi"
+            >
+              <Bell className="w-[18px] h-[18px]" />
               {unread > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-danger text-white text-[10px] rounded-full flex items-center justify-center font-bold">
                   {unread > 9 ? '9+' : unread}
                 </span>
               )}
             </button>
-            {/* Dropdown notifikasi */}
+
             {notifOpen && (
-              <div className="absolute right-0 top-10 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                  <span className="text-sm font-semibold text-gray-800">Notifikasi</span>
-                  {unread > 0 && <button onClick={markAllRead} className="text-xs text-blue-600 hover:text-blue-800">Tandai semua dibaca</button>}
+              <div className="absolute right-0 top-11 w-80 rounded-xl border border-border bg-surface-raised shadow-soft-lg z-50 overflow-hidden animate-scale-in">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
+                  <span className="text-sm font-semibold text-ink-primary">Notifikasi</span>
+                  {unread > 0 && <button onClick={markAllRead} className="text-xs text-brand-600 hover:text-brand-700">Tandai semua dibaca</button>}
                 </div>
-                <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
+                <div className="max-h-72 overflow-y-auto divide-y divide-border-subtle">
                   {notifs.length === 0 ? (
-                    <div className="py-8 text-center text-sm text-gray-400">Tidak ada notifikasi</div>
-                  ) : notifs.map(n => (
-                    <div key={n.id} onClick={() => { markRead(n.id); if (n.dokumen_id) router.push(`/dokumen/${n.dokumen_id}`); setNotifOpen(false) }}
-                      className={`px-4 py-3 cursor-pointer hover:bg-gray-50 ${!n.dibaca ? 'bg-blue-50' : ''}`}>
+                    <div className="py-8 text-center text-sm text-ink-tertiary">Tidak ada notifikasi</div>
+                  ) : notifs.map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => { markRead(n.id); if (n.dokumen_id) router.push(`/dokumen/${n.dokumen_id}`); setNotifOpen(false) }}
+                      className={cn('px-4 py-3 cursor-pointer hover:bg-surface-sunken transition-colors', !n.dibaca && 'bg-info-subtle/40')}
+                    >
                       <div className="flex items-start gap-2">
-                        {!n.dibaca && <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0"></span>}
+                        {!n.dibaca && <span className="w-2 h-2 rounded-full bg-brand-500 mt-1.5 flex-shrink-0" />}
                         <div className={!n.dibaca ? '' : 'ml-4'}>
-                          <p className="text-xs font-medium text-gray-800">{n.judul}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{n.pesan}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{new Date(n.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                          <p className="text-xs font-medium text-ink-primary">{n.judul}</p>
+                          <p className="text-xs text-ink-tertiary mt-0.5">{n.pesan}</p>
+                          <p className="text-[11px] text-ink-tertiary/70 mt-0.5">
+                            {new Date(n.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -159,8 +276,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
-        </div>
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          {children}
+          <Footer />
+        </main>
       </div>
     </div>
   )

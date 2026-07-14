@@ -51,7 +51,7 @@ export default function LogAktivitas() {
 
   return (
     <>
-      <Head><title>Log Aktivitas — Monitoring Reviu</title></Head>
+      <Head><title>Log Aktivitas — DRES | Inspectorate of West Sumba Regency</title></Head>
       <Layout>
         <div className="space-y-5">
           <div>

@@ -87,7 +87,7 @@ export default function DokumenPage() {
 
   return (
     <>
-      <Head><title>Daftar Dokumen — Monitoring Reviu</title></Head>
+      <Head><title>Daftar Dokumen — DRES | Inspectorate of West Sumba Regency</title></Head>
       <Layout>
         <div className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">

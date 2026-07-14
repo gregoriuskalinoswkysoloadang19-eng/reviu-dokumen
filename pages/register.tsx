@@ -86,7 +86,7 @@ export default function RegisterPage() {
 
   return (
     <>
-      <Head><title>Register Dokumen — Monitoring Reviu</title></Head>
+      <Head><title>Register Dokumen — DRES | Inspectorate of West Sumba Regency</title></Head>
       <Layout>
         <div className="max-w-2xl space-y-5">
           <Link href="/dokumen" className="text-sm text-gray-500 hover:text-gray-700">← Kembali</Link>

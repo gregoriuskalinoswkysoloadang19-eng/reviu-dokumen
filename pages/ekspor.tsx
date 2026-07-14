@@ -79,7 +79,7 @@ export default function EksporPage() {
       </tr>`).join('')
 
     const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
-    <title>Laporan Monitoring Reviu Dokumen</title>
+    <title>Laporan DRES — Document Review & Evaluation System</title>
     <style>
       * { margin:0; padding:0; box-sizing:border-box; }
       body { font-family: Arial, sans-serif; color: #111827; padding: 24px; }
@@ -104,12 +104,12 @@ export default function EksporPage() {
       <img src="/logo-sumba-barat.png" alt="Logo" onerror="this.style.display='none'"/>
       <div class="kop-text">
         <h1>INSPEKTORAT KABUPATEN SUMBA BARAT</h1>
-        <h2>Sistem Monitoring Reviu Dokumen</h2>
+        <h2>DRES — Document Review & Evaluation System</h2>
         <p>Perencanaan · Keuangan · Kinerja</p>
       </div>
     </div>
     <div class="judul">
-      <h3>Laporan Monitoring Reviu Dokumen</h3>
+      <h3>Laporan DRES — Inspectorate of West Sumba Regency</h3>
       <p>Dicetak: ${today}${filterInfo?' | Filter: '+filterInfo:''}</p>
     </div>
     <div class="summary">
@@ -141,7 +141,7 @@ export default function EksporPage() {
 
   return (
     <>
-      <Head><title>Ekspor Laporan — Monitoring Reviu</title></Head>
+      <Head><title>Ekspor Laporan — DRES | Inspectorate of West Sumba Regency</title></Head>
       <Layout>
         <div className="space-y-5 max-w-4xl">
           <div>
